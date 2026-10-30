@@ -1,0 +1,16 @@
+.git
+.codex
+.code-review-graph
+.pnpm-store
+**/node_modules
+**/dist
+**/dist-test
+**/*.tsbuildinfo
+.env
+.env.*
+deploy/.env
+backups
+data
+*.dump
+test-results
+playwright-report

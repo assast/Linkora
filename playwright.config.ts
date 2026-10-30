@@ -1,0 +1,17 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/browser',
+  workers: 1,
+  fullyParallel: false,
+  timeout: 180_000,
+  expect: { timeout: 25_000 },
+  use: { baseURL: 'http://127.0.0.1:5173', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  projects: [
+    { name: 'chromium-desktop', use: { browserName: 'chromium', channel: process.env.CI ? undefined : 'chrome', viewport: { width: 1440, height: 900 } } },
+    { name: 'chromium-mobile', use: { browserName: 'chromium', channel: process.env.CI ? undefined : 'chrome', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    { name: 'webkit-desktop', use: { browserName: 'webkit', viewport: { width: 1440, height: 900 } } },
+    { name: 'webkit-mobile', use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+  ],
+  webServer: { command: 'pnpm dev:verify', url: 'http://127.0.0.1:5173/api/v1/health', reuseExistingServer: !process.env.CI, timeout: 90_000 },
+});

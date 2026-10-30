@@ -1,0 +1,33 @@
+{
+  "name": "linkora",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:verify": "node scripts/verify.mjs",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.browser-tests.json",
+    "lint": "eslint apps scripts tests",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "test:e2e": "playwright test",
+    "test:delivery": "node --test tests/delivery.test.mjs",
+    "test:benchmark": "node scripts/benchmark.mjs",
+    "db:generate": "pnpm --filter @linkora/api db:generate",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate:test": "node scripts/migrate.mjs --test",
+    "owner:init": "pnpm --filter @linkora/api owner:init"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.56.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}

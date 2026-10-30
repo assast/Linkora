@@ -1,0 +1,24 @@
+FROM node:24.22.2-bookworm-slim AS base
+RUN apt-get update && apt-get install --yes --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+FROM base AS build
+WORKDIR /workspace
+RUN npm install --global pnpm@10.20.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/api/package.json apps/api/package.json
+RUN pnpm install --frozen-lockfile --filter @linkora/api...
+COPY apps/api apps/api
+RUN DATABASE_URL=postgresql://build_only:unused@127.0.0.1:5432/build_only pnpm --filter @linkora/api db:generate && pnpm --filter @linkora/api build
+RUN pnpm --filter @linkora/api deploy --prod --legacy /runtime
+WORKDIR /runtime
+RUN DATABASE_URL=postgresql://build_only:unused@127.0.0.1:5432/build_only node node_modules/prisma/build/index.js generate --schema prisma/schema.prisma
+
+FROM base AS runtime
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
+WORKDIR /app
+COPY --from=build --chown=node:node /runtime /app
+COPY --chmod=755 deploy/start-api.sh /app/start-api.sh
+USER node
+EXPOSE 3000
+ENTRYPOINT ["/app/start-api.sh"]

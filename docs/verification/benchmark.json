@@ -1,0 +1,33 @@
+{
+  "database": "NC PostgreSQL 16",
+  "node": "v24.22.2",
+  "temporaryRows": 5000,
+  "publicRows": 2667,
+  "rolledBack": true,
+  "measurements": [
+    {
+      "query": "所有者搜索与分页",
+      "milliseconds": 1206,
+      "returned": 50,
+      "total": 5000
+    },
+    {
+      "query": "所有者四级分类后代筛选",
+      "milliseconds": 4286,
+      "returned": 50,
+      "total": 4000
+    },
+    {
+      "query": "访客授权搜索与分页",
+      "milliseconds": 601,
+      "returned": 50,
+      "total": 2667
+    },
+    {
+      "query": "访客四级分类后代筛选",
+      "milliseconds": 871,
+      "returned": 50,
+      "total": 2667
+    }
+  ]
+}
