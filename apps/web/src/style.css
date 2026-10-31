@@ -63,6 +63,10 @@ input[type=checkbox] { accent-color:var(--primary); }
 .bookmark-primary { min-width:0; }
 .bookmark-tags { display:flex; gap:4px; min-width:0; overflow:hidden; }
 .bookmark-tile .tile-name>a { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bookmark-row,.bookmark-tile { position:relative; isolation:isolate; }
+.bookmark-surface-link::after { content:""; position:absolute; inset:0; z-index:1; cursor:pointer; }
+.bookmark-surface-link:focus-visible::after { outline:2px solid var(--primary); outline-offset:-2px; border-radius:8px; }
+.bookmark-row .row-actions>*,.bookmark-tile .row-actions>*,.bookmark-row .select-bookmark,.bookmark-tile .select-bookmark { position:relative; z-index:2; }
 .batch-tags { min-height:32px; background:var(--sub); border:1px solid var(--border); border-radius:7px; padding:0 8px; font-size:11px; color:var(--text); width:160px; }
 .batch-target { max-width:190px; }
 .bulk-bar { position:sticky; top:8px; z-index:5; box-shadow:0 4px 12px #15193008; }
