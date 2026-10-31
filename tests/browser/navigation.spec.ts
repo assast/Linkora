@@ -42,8 +42,8 @@ for (const view of ['卡片', '列表']) {
       const content = item.locator(selector);
       if (await content.isVisible()) await expectBookmarkPopup(page, () => content.click({ force: true }));
     }
-    const link = item.locator(`a[href="${books[0].url}"]`);
-    await expect(link).toHaveCount(1);
+    const link = item.locator('a.bookmark-surface-link');
+    await expect(link).toHaveAttribute('href', books[0].url);
     await link.focus();
     await expectBookmarkPopup(page, () => page.keyboard.press('Enter'));
     if (!isMobile) {
@@ -68,7 +68,7 @@ for (const view of ['卡片', '列表']) {
     const item = page.locator(selector).first();
     await expectBookmarkPopup(page, () => item.click({ position: { x: 3, y: 3 } }));
     await expect.poll(() => visits.length).toBe(1);
-    await expectBookmarkPopup(page, () => item.locator(`a[href="${books[0].url}"]`).click());
+    await expectBookmarkPopup(page, () => item.locator('a.bookmark-surface-link').click());
     await expect.poll(() => visits.length).toBe(2);
     await item.getByRole('checkbox', { name: '选择 测试书签 0' }).check();
     await expect(page.locator('.bulk-bar')).toBeVisible();
