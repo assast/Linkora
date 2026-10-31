@@ -54,7 +54,7 @@
 
 ## 后续 NC 验收
 
-目标仓库已确定为 `https://github.com/assast/Linkora`，本地 origin 已配置。实际发布配置仍需核对；届时执行实际 CI、镜像配对拉取、Compose 首次部署/重启、原生 PG 备份恢复和兼容版本回退，这些步骤尚未标记通过。操作步骤见 [deployment.md](../deployment.md)。
+部署前数据库备份恢复演练和配对镜像回退演练仍待完成。首轮发布与 NC 部署记录见 [deployment.md](../deployment.md)。
 
 ## Linkora 品牌、仓库入口与 agent 技能
 
@@ -64,4 +64,11 @@
 - `pnpm lint`、`pnpm typecheck`、7 项前端测试、前后端生产构建与 OpenSpec 严格校验通过；未重新运行会重建夹具的 API 全量测试。
 - `skill/linkora-management` 通过 skill-creator 格式校验。`pnpm test:skill` 的 9 项隔离测试覆盖 Cookie 权限/复用、CSRF、匿名隔离、写入保护、预览/提交、站点路径隔离、禁止重定向、失效会话、错误不重放、退出及输出脱敏；已加入 CI。
 - 客户端在现有 `verification:true` 本地服务完成实际登录、会话复用、分类/书签查询、只读批量导出预览与退出，未执行内容写入或正式导出。
-- 本轮只设置远端，没有推送 Git、发布镜像或运行 Docker/NC 部署。
+
+## NC 首轮部署
+
+- 提交 `236b43590f5137290964c38efbb4a5ebe5c56630` 的 GitHub Actions 检查、Web/API 镜像构建和 GHCR 配对发布全部通过。
+- NC Dockge stack `/docker/dockge/stacks/linkora` 运行相同提交的 `linkora-web` 与 `linkora-api` 镜像；API 健康检查通过，站点端口绑定 `10.144.144.10:8080`。
+- `https://nav.icio.eu.org` 页面和 API health 均通过，所有者可登录读取 784 个书签、57 个分类、702 次点击及 20 个星标；退出后访客仅看到 300 个公开书签，私密详情返回 404。
+- 正式库迁移前已在 NC 保存并验证 PostgreSQL 备份，路径与权限见 [deployment.md](../deployment.md)。
+- 书签管理技能经正式域名完成会话登录、查询与注销。

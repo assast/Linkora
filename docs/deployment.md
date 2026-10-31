@@ -48,6 +48,14 @@ docker exec ai-postgres psql -U linkora_test -d linkora_restore_test -c 'SELECT 
 
 若数据结构不兼容，先停止本项目 API 写入，把备份恢复到新的专用数据库并完成验证，再将配对应用与连接一起切回。切换旧镜像不会自动撤销数据库迁移；不对 NC 其他数据库或共享 PG 服务执行重置。
 
-## 待实机记录
+## NC 首轮部署记录
 
-代码仓库已确定为 <https://github.com/assast/Linkora>。首次 CI 运行、镜像可见性与标签/摘要、NC 容器健康状态、恢复核对和回退演练结果，在 Git 打包后的 NC 验证阶段补入。当前不能提前填写为通过。
+首轮 NC 部署已完成，记录如下：
+
+- Git 提交：`236b43590f5137290964c38efbb4a5ebe5c56630`；[GitHub Actions](https://github.com/assast/Linkora/actions/runs/41169878479) 的检查、两个 Docker 构建与两个 GHCR 发布 job 全部通过。
+- 配对镜像：`ghcr.io/assast/linkora-web:sha-236b43590f5137290964c38efbb4a5ebe5c56630` 与 `ghcr.io/assast/linkora-api:sha-236b43590f5137290964c38efbb4a5ebe5c56630`。
+- NC stack：`/docker/dockge/stacks/linkora`；私有环境文件权限为 `0600`；部署前 PostgreSQL 备份为 `/root/linkora-backups/linkora-before-40a36a0.dump`（93,761 bytes，权限 `0600`）。
+- Web/API 容器正常运行，API health 为 `ok`；私网入口 `http://10.144.144.10:8080` 返回 HTTP 200，`https://nav.icio.eu.org` 返回 Linkora 页面且 API health 为 `ok`。
+- 域名所有者登录通过：57 个分类、784 个书签、702 次历史点击、20 个星标；访客看到 300 个公开书签，私密书签直达为 404。管理技能客户端通过域名登录并安全退出。
+
+NC 空库备份恢复演练，以及兼容数据库的配对镜像回退尚未执行；见 OpenSpec 任务 9.4 和 9.7。
