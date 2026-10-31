@@ -27,7 +27,7 @@ model Session {
   tokenHash String   @id @map("token_hash") @db.Char(64)
   userId    String   @map("user_id") @db.Uuid
   csrfToken String   @map("csrf_token") @db.Char(64)
-  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])

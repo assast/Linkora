@@ -9,15 +9,18 @@ import { StaleSessionError } from './api';
 function LoginDialog() {
   const app = useApp();
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [sessionDays, setSessionDays] = useState(String(app.identity.defaultSessionDays ?? 7)), [permanent, setPermanent] = useState(false);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); const fields = new FormData(event.currentTarget); setBusy(true); setError('');
-    try { await app.login(String(fields.get('email')), String(fields.get('password'))); }
+    try { await app.login(String(fields.get('email')), String(fields.get('password')), permanent ? null : Number(sessionDays)); }
     catch (error) { if (!(error instanceof StaleSessionError)) setError(errorMessage(error)); }
     finally { setBusy(false); }
   };
   return <Modal title={`登录 ${APP_NAME}`} description="登录后查看与管理全部收藏，私密内容无需再次解锁。" onClose={() => app.closeDialog()}>
     <form onSubmit={submit}><div className="field"><label htmlFor="login-email">邮箱</label><input id="login-email" name="email" type="email" required autoComplete="username" autoFocus /></div>
       <div className="field"><label htmlFor="login-password">密码</label><input id="login-password" name="password" type="password" required minLength={8} maxLength={1024} autoComplete="current-password" /></div>
+      <div className="field"><label htmlFor="login-session-days">免登录天数</label><input id="login-session-days" name="sessionDays" type="number" min="1" max="3650" step="1" required={!permanent} disabled={permanent} value={sessionDays} onChange={event => setSessionDays(event.target.value)} /><small>可设置 1 至 3650 天</small></div>
+      <label className="check-card"><input type="checkbox" checked={permanent} onChange={event => setPermanent(event.target.checked)} /><span><strong>永久有效</strong><small>直到你主动退出登录</small></span></label>
       {error && <p className="modal-error" role="alert">{error}</p>}<div className="modal-footer"><Button onClick={() => app.closeDialog()}>取消</Button><Button className="primary" type="submit" disabled={busy}><Icon name={busy ? 'loading' : 'unlock'} />{busy ? '正在登录' : '登录'}</Button></div>
     </form>
   </Modal>;

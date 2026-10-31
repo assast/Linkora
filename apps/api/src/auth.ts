@@ -13,6 +13,8 @@ export const Public = () => SetMetadata('public', true);
 export const Identity = createParamDecorator((_: unknown, ctx: ExecutionContext): Viewer => ctx.switchToHttp().getRequest<AuthRequest>().viewer);
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const equal = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const DAY_MS = 86_400_000;
+const PERMANENT_COOKIE_MAX_AGE = 400 * DAY_MS;
 
 @Injectable()
 export class AuthService {
@@ -23,12 +25,13 @@ export class AuthService {
     if (request.get('origin') !== this.config.siteUrl.origin) throw new ForbiddenException('请求来源不允许');
   }
 
-  async resolve(request: Request): Promise<Viewer> {
+  async resolve(request: Request, response?: Response): Promise<Viewer> {
     const token: unknown = request.cookies?.[this.config.cookieName];
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return { ownerId: null };
     const tokenHash = hash(token);
     const session = await this.db.session.findUnique({ where: { tokenHash }, include: { user: { select: { id: true, email: true } } } });
-    if (!session || session.expiresAt.getTime() <= Date.now()) return { ownerId: null };
+    if (!session || (session.expiresAt && session.expiresAt.getTime() <= Date.now())) return { ownerId: null };
+    if (!session.expiresAt) response?.cookie(this.config.cookieName, token, { ...this.config.cookieOptions, maxAge: PERMANENT_COOKIE_MAX_AGE });
     return { ownerId: session.userId, email: session.user.email, csrfToken: session.csrfToken, tokenHash };
   }
 
@@ -45,8 +48,9 @@ export class AuthService {
     if (!user || !await argon2.verify(user.passwordHash, dto.password)) throw new UnauthorizedException('账号或密码错误');
     const token = randomBytes(32).toString('hex');
     const csrfToken = randomBytes(32).toString('hex');
-    const duration = this.config.sessionDays * 86_400_000;
-    await this.db.session.create({ data: { tokenHash: hash(token), csrfToken, userId: user.id, expiresAt: new Date(now + duration) } });
+    const sessionDays = dto.sessionDays === null ? null : dto.sessionDays ?? this.config.sessionDays;
+    const duration = sessionDays === null ? PERMANENT_COOKIE_MAX_AGE : sessionDays * DAY_MS;
+    await this.db.session.create({ data: { tokenHash: hash(token), csrfToken, userId: user.id, expiresAt: sessionDays === null ? null : new Date(now + duration) } });
     response.cookie(this.config.cookieName, token, { ...this.config.cookieOptions, maxAge: duration });
     return { authenticated: true, owner: { id: user.id, email: user.email }, csrfToken };
   }
@@ -63,7 +67,8 @@ class AuthGuard implements CanActivate {
   constructor(private readonly reflector: Reflector, private readonly auth: AuthService) {}
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthRequest>();
-    request.viewer = await this.auth.resolve(request);
+    const response = context.switchToHttp().getResponse<Response>();
+    request.viewer = await this.auth.resolve(request, response);
     if (this.reflector.getAllAndOverride<boolean>('public', [context.getHandler(), context.getClass()])) return true;
     if (!request.viewer.ownerId) throw new UnauthorizedException('请先登录');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
@@ -77,9 +82,10 @@ class AuthGuard implements CanActivate {
 
 @Controller('auth')
 class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly config: AppConfig) {}
   @Public() @Get('me') me(@Identity() viewer: Viewer) {
-    return viewer.ownerId ? { authenticated: true, owner: { id: viewer.ownerId, email: viewer.email }, csrfToken: viewer.csrfToken } : { authenticated: false };
+    return viewer.ownerId ? { authenticated: true, owner: { id: viewer.ownerId, email: viewer.email }, csrfToken: viewer.csrfToken, defaultSessionDays: this.config.sessionDays }
+      : { authenticated: false, defaultSessionDays: this.config.sessionDays };
   }
   @Public() @Post('login') login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) { return this.auth.login(dto, req, res); }
   @Post('logout') logout(@Identity() viewer: Viewer, @Res({ passthrough: true }) res: Response) { return this.auth.logout(viewer, res); }

@@ -92,8 +92,8 @@ function useAppState() {
     catch (error) { if (!(error instanceof StaleSessionError)) { client.setQueryData(key, old); toast.error(errorMessage(error)); } }
   };
   const refresh = useCallback(() => client.invalidateQueries({ queryKey: ['data', scope] }), [client, scope]);
-  const login = async (email: string, password: string) => {
-    const next = await call<Identity>('/auth/login', { method: 'POST', body: { email, password } });
+  const login = async (email: string, password: string, sessionDays: number | null) => {
+    const next = await call<Identity>('/auth/login', { method: 'POST', body: { email, password, sessionDays } });
     resetRequests(); await client.cancelQueries(); previousScope.current = next.owner!.id;
     removeOldData(next.owner!.id); client.setQueryData(['identity'], next); closeDialog(); toast.success('登录成功，全部收藏已就绪');
   };

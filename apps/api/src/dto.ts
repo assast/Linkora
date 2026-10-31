@@ -22,6 +22,8 @@ export class LoginDto {
   @ApiProperty() @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value)
   @IsEmail() @MaxLength(254) email!: string;
   @ApiProperty() @IsString() @MinLength(8) @MaxLength(1024) password!: string;
+  @ApiProperty({ required: false, nullable: true, minimum: 1, maximum: 3650 })
+  @Type(() => Number) @ValidateIf((_, value) => value !== undefined && value !== null) @IsInt() @Min(1) @Max(3650) sessionDays?: number | null;
 }
 
 export class ConfirmationDto {

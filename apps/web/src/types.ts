@@ -1,4 +1,4 @@
-export interface Identity { authenticated: boolean; owner?: { id: string; email: string }; csrfToken?: string }
+export interface Identity { authenticated: boolean; owner?: { id: string; email: string }; csrfToken?: string; defaultSessionDays?: number }
 export interface Category {
   id: string; parentId: string | null; name: string; isPrivate: boolean; effectivePrivate: boolean;
   inheritedPrivate: boolean; sortOrder: number; path: string; count: number; children: Category[];

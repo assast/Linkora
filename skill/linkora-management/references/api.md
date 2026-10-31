@@ -4,10 +4,10 @@
 
 ## 认证与错误
 
-- `POST /auth/login`：`{email,password}`；`Origin` 必须等于服务端 `SITE_URL` 的源。
-- `GET /auth/me`：返回 `authenticated`、所有者身份与 `csrfToken`。
+- `POST /auth/login`：`{email,password,sessionDays?}`；`sessionDays` 可设为 1–3650 的整数，`null` 表示永久有效，省略时采用服务端 `SESSION_DAYS`（默认 7 天）；`Origin` 必须等于服务端 `SITE_URL` 的源。
+- `GET /auth/me`：返回 `authenticated`、所有者身份与 `csrfToken`；`defaultSessionDays` 表示当前服务端默认免登录天数。
 - `POST /auth/logout`：注销当前会话。
-- 会话 Cookie 为 `linkora_session`，HttpOnly，作用路径 `/api`，默认 7 天。所有者的非 GET 请求同时携带 Cookie、`Origin`、`X-CSRF-Token`；登录只要求可信来源。
+- 会话 Cookie 为 `linkora_session`，HttpOnly，作用路径 `/api`；有限会话按所选天数到期，永久会话在服务端不设过期时间并在访问时续期 Cookie。所有者的非 GET 请求同时携带 Cookie、`Origin`、`X-CSRF-Token`；登录只要求可信来源。
 - 无注册、改密或导入接口。首次账号由部署端 `owner:init` 初始化，已有账号时拒绝覆盖。
 - 400：字段或操作参数错误；401：需要登录；403：来源/CSRF 错误；404：访客不可见或 ID 不存在；409：过期修订、重名或仍被引用；429：登录限流；503：数据库未就绪。
 - 不反复尝试密码。先核对来源、凭据来源和登录限流，不能通过更换 IP 或关闭校验绕过。
