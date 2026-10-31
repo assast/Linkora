@@ -92,7 +92,7 @@ class Client:
 
     def call(self, method, path, body=None):
         path = api_path(path)
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "User-Agent": "LinkoraSkillClient/1.0"}
         if method != "GET":
             headers["Origin"] = self.origin
             if self.csrf:
