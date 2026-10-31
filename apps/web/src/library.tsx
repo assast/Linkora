@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ export function LibraryPage() {
   const app = useApp();
   const [params, setParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedState, setSelectedState] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] });
   const [operation, setOperation] = useState<Operation | null>(null);
   const [targetCategory, setTargetCategory] = useState('');
@@ -28,6 +29,7 @@ export function LibraryPage() {
   const [busy, setBusy] = useState(false);
   const key = app.scope + ':' + params.toString();
   const selected = selectedState.key === key ? selectedState.ids : [];
+  const selectionEnabled = app.identity.authenticated && multiSelectMode;
   const select = (ids: string[]) => setSelectedState({ key, ids });
   const requestParams = new URLSearchParams(params);
   requestParams.delete('filter');
@@ -60,7 +62,22 @@ export function LibraryPage() {
     const next = new URLSearchParams(params); if (value) next.set(name, value); else next.delete(name); next.delete('page'); if (name === 'favorite') next.delete('filter'); setParams(next);
   };
   const toggle = (id: string) => select(selected.includes(id) ? selected.filter(value => value !== id) : [...selected, id]);
-  const allSelected = !!query.data?.items.length && query.data.items.every(book => selected.includes(book.id));
+  const pageIds = query.data?.items.map(book => book.id) ?? [];
+  const selectedOnPage = pageIds.filter(id => selected.includes(id)).length;
+  const allSelected = pageIds.length > 0 && selectedOnPage === pageIds.length;
+  const partiallySelected = selectedOnPage > 0 && !allSelected;
+  const pageSelectionRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (pageSelectionRef.current) pageSelectionRef.current.indeterminate = partiallySelected;
+  }, [partiallySelected]);
+  useEffect(() => {
+    setMultiSelectMode(false);
+    setSelectedState({ key: '', ids: [] });
+  }, [app.scope]);
+  const toggleMultiSelect = () => {
+    if (multiSelectMode) select([]);
+    setMultiSelectMode(!multiSelectMode);
+  };
   const toggleStar = async (book: Bookmark) => {
     try { await app.call(`/bookmarks/${book.id}`, { method: 'PATCH', body: { isFavorite: !book.isFavorite } }); await app.refresh(); }
     catch (error) { if (!(error instanceof StaleSessionError)) toast.error(errorMessage(error)); }
@@ -104,28 +121,32 @@ export function LibraryPage() {
       <Button className={showFilters ? 'soft' : ''} onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}><Icon name="filter" />筛选</Button>
       <select className="control-select" aria-label="排序" value={params.get('sort') || 'newest'} onChange={event => changeFilter('sort', event.target.value)}><option value="newest">最近添加</option><option value="oldest">最早添加</option><option value="frequent">访问最多</option><option value="title">名称 A–Z</option></select>
       <div className="view-control"><button className={app.preferences.defaultView === 'list' ? 'active' : ''} title="紧凑列表" aria-label="紧凑列表" aria-pressed={app.preferences.defaultView === 'list'} onClick={() => void app.updatePreferences({ defaultView: 'list' })}><Icon name="list" /></button><button className={app.preferences.defaultView === 'grid' ? 'active' : ''} title="紧凑卡片" aria-label="紧凑卡片" aria-pressed={app.preferences.defaultView === 'grid'} onClick={() => void app.updatePreferences({ defaultView: 'grid' })}><Icon name="grid" /></button></div>
+      {app.identity.authenticated && <>
+        <Button className={multiSelectMode ? 'soft' : ''} aria-pressed={multiSelectMode} onClick={toggleMultiSelect}>{multiSelectMode ? '退出多选' : '多选'}</Button>
+        {multiSelectMode && <label className="select-page-control"><input ref={pageSelectionRef} type="checkbox" aria-label="全选当前页" checked={allSelected} disabled={!pageIds.length} onChange={event => select(event.target.checked ? pageIds : [])} />全选当前页</label>}
+      </>}
     </div>
     {showFilters && <div className="filter-panel panel"><label>星标<select className="control-select" value={params.get('favorite') || ''} onChange={event => changeFilter('favorite', event.target.value)}><option value="">全部</option><option value="true">仅星标</option><option value="false">未星标</option></select></label>
       {app.identity.authenticated && <label>可见性<select className="control-select" value={params.get('privacy') || 'all'} onChange={event => changeFilter('privacy', event.target.value)}><option value="all">全部</option><option value="public">普通</option><option value="private">私密</option></select></label>}
       <div className="filter-tags"><span>标签（全部匹配）</span>{app.tagsQuery.data?.map(tag => <label className="tag-filter" key={tag.id}><input type="checkbox" checked={(params.get('tagIds') || '').split(',').includes(tag.id)} onChange={event => {
         const ids = (params.get('tagIds') || '').split(',').filter(Boolean); changeFilter('tagIds', (event.target.checked ? [...ids, tag.id] : ids.filter(id => id !== tag.id)).join(','));
       }} />{tag.name}</label>)}</div><Button onClick={() => setParams(category ? { categoryId: category.id } : {})}>清除筛选</Button></div>}
-    {app.identity.authenticated && selected.length > 0 && <div className="bulk-bar bulk-visible"><span className="bulk-total"><Icon name="check" />已选择 <b>{selected.length}</b> 条（当前页）</span>
+    {selectionEnabled && selected.length > 0 && <div className="bulk-bar bulk-visible"><span className="bulk-total"><Icon name="check" />已选择 <b>{selected.length}</b> 条（当前页）</span>
       <select className="control-select" aria-label="批量操作" value={operation || ''} onChange={event => setOperation(event.target.value as Operation || null)}><option value="">选择操作</option>{Object.entries(labels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
       {operation === 'MOVE_CATEGORY' && <select className="control-select batch-target" aria-label="目标分类" value={targetCategory} onChange={event => setTargetCategory(event.target.value)}><option value="">未分类</option>{app.flatCategories.map(item => <option value={item.id} key={item.id}>{item.path}</option>)}</select>}
       {operation && ['ADD_TAGS', 'REMOVE_TAGS', 'REPLACE_TAGS'].includes(operation) && <input className="batch-tags" aria-label="批量标签" placeholder="用逗号分隔标签" value={tagText} onChange={event => setTagText(event.target.value)} />}
       {operation && ['SET_FAVORITE', 'SET_PRIVACY'].includes(operation) && <select className="control-select" aria-label="设置值" value={settingValue} onChange={event => setSettingValue(event.target.value)}><option value="true">{operation === 'SET_FAVORITE' ? '添加星标' : '设为私密'}</option><option value="false">{operation === 'SET_FAVORITE' ? '取消星标' : '设为普通'}</option></select>}
       <Button className={operation === 'DELETE' ? 'danger' : 'primary'} disabled={!operation || busy} onClick={() => void submitBatch()}>{busy ? '处理中…' : '预览操作'}</Button><Button className="clear-selected" onClick={() => select([])}>取消选择</Button></div>}
     {query.isPending ? <Loading /> : query.isError ? <QueryError retry={() => void query.refetch()} /> : !query.data.items.length ? <Empty title="没有找到符合条件的书签" description="试试其他关键词或分类，也可以添加你的第一条收藏。"><Button onClick={() => setParams({})}>查看全部</Button></Empty> : <>
-      {app.preferences.defaultView === 'list' ? <div className={`data-table panel ${app.identity.authenticated ? 'with-selection' : ''}`}>
-        <div className="table-header">{app.identity.authenticated && <input type="checkbox" aria-label="全选当前页" checked={allSelected} onChange={event => select(event.target.checked ? query.data.items.map(book => book.id) : [])} />}<span>书签名称</span><span className="table-url">链接</span><span className="bookmark-category">所属分类</span><span className="bookmark-tags">标签</span><span className="bookmark-date">添加日期</span><span>操作</span></div>
+      {app.preferences.defaultView === 'list' ? <div className={`data-table panel ${selectionEnabled ? 'with-selection' : ''}`}>
+        <div className="table-header">{selectionEnabled && <span aria-hidden="true" />}<span>书签名称</span><span className="table-url">链接</span><span className="bookmark-category">所属分类</span><span className="bookmark-tags">标签</span><span className="bookmark-date">添加日期</span><span>操作</span></div>
         {query.data.items.map(book => <div className={`bookmark-row ${selected.includes(book.id) ? 'row-selected' : ''}`} key={book.id}>
-          {app.identity.authenticated && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
+          {selectionEnabled && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
           <VisitLink book={book} className="bookmark-primary bookmark-surface-link"><SiteIcon title={book.title} url={book.url} /><span className="bookmark-name"><strong title={book.title}>{book.title} <PrivateMark value={book.effectivePrivate} /></strong></span></VisitLink>
           <VisitLink book={book} className="bookmark-url truncate">{domain(book.url)}</VisitLink>
           <span className="bookmark-category truncate" title={book.categoryPath}>{book.categoryPath}</span><span className="bookmark-tags">{book.tags.slice(0, 2).map(tag => <span className="tiny-tag" key={tag}>{tag}</span>)}</span><span className="bookmark-date">{book.createdAt.slice(0, 10)}</span>{rowActions(book)}
         </div>)}</div> : <div className="tile-grid">{query.data.items.map(book => <div className={`bookmark-tile ${selected.includes(book.id) ? 'row-selected' : ''}`} key={book.id}><div className="tile-top">
-          {app.identity.authenticated && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
+          {selectionEnabled && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
           <SiteIcon title={book.title} url={book.url} /><div className="tile-name"><VisitLink book={book} className="bookmark-surface-link"><span className="truncate">{book.title} <PrivateMark value={book.effectivePrivate} /></span></VisitLink><div className="tile-domain truncate">{domain(book.url)}</div></div>{rowActions(book)}</div><div className="tile-bottom"><span title={book.categoryPath}>{book.categoryPath}</span>{book.isFavorite && <Icon name="star" />}</div></div>)}</div>}
       <div className="pagination"><span>共 {query.data.total} 条 · 第 {query.data.page} / {Math.max(1, Math.ceil(query.data.total / query.data.pageSize))} 页</span><select className="control-select" aria-label="每页数量" value={query.data.pageSize} onChange={event => changeFilter('pageSize', event.target.value)}>{[20, 50, 100].map(size => <option value={size} key={size}>{size} 条/页</option>)}</select>
         <Button disabled={query.data.page <= 1} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(query.data.page - 1)); setParams(next); }}>上一页</Button><Button disabled={query.data.page * query.data.pageSize >= query.data.total} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(query.data.page + 1)); setParams(next); }}>下一页</Button></div>

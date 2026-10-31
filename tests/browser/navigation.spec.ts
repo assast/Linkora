@@ -70,6 +70,7 @@ for (const view of ['卡片', '列表']) {
     await expect.poll(() => visits.length).toBe(1);
     await expectBookmarkPopup(page, () => item.locator('a.bookmark-surface-link').click());
     await expect.poll(() => visits.length).toBe(2);
+    await page.getByRole('button', { name: '多选', exact: true }).click();
     await item.getByRole('checkbox', { name: '选择 测试书签 0' }).check();
     await expect(page.locator('.bulk-bar')).toBeVisible();
     await item.getByRole('button', { name: '添加星标 测试书签 0' }).click();

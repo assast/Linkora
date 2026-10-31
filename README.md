@@ -17,6 +17,8 @@ pnpm dev
 
 前端：<http://127.0.0.1:5173>。后端：<http://127.0.0.1:3000/api/v1/health>。API 文档：<http://127.0.0.1:5173/api/docs>，通过前端代理访问时与站点保持同源。
 
+`scripts/local-service.sh` 支持 `start`、`restart`、`stop`、`status` 来管理后台开发服务。运行日志写入被 Git 忽略的 `.cache/local-service/linkora.log`。
+
 应用默认没有演示账号和书签。首次设置账号时，在本地 `.env` 临时添加 `OWNER_EMAIL` 和 `OWNER_PASSWORD`（至少 8 位），执行 `pnpm owner:init`，然后移除初始密码配置。账号存在后初始化命令不会覆盖它。
 
 ## 隔离验证环境
