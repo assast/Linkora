@@ -5,9 +5,9 @@
 ## 发布输入
 
 - 代码仓库为 <https://github.com/assast/Linkora>，本地 `origin` 使用该地址。工作流使用 GitHub Actions + GHCR；首次发布前确认 Actions 权限及镜像可见性。
-- 配对发布 `ghcr.io/assast/linkora-web` 与 `ghcr.io/assast/linkora-api`，部署配置使用 `IMAGE_REPOSITORY=ghcr.io/assast/linkora`，两个镜像使用同一个 `sha-<完整提交>` 或 `vX.Y.Z` 标签。
+- 配对发布 `ghcr.io/assast/linkora-web` 与 `ghcr.io/assast/linkora-api`，部署配置使用 `IMAGE_REPOSITORY=ghcr.io/assast/linkora`。`main` 检查成功后发布 `sha-<完整提交>` 和 `latest`；稳定版本标签发布 `vX.Y.Z` 和 `latest`。NC 使用 `APP_VERSION=latest`，需要固定提交时可改用同一个 SHA 标签。
 - Web 直接通过 `http://10.144.144.10:8080` 提供访问，并加入现有 `proxy_network`，由 Traefik 按 `nav.icio.eu.org` 路由。应用隔离网络使用 `172.16.15.0/24`，避免与 NC 已分配的 Docker 子网冲突。正式登录源使用 `https://nav.icio.eu.org`；域名的 Cloudflare Tunnel 公开主机名需指向现有 Traefik HTTP 入口。
-- `main` 发布提交标签，稳定版本发布才更新 `latest`；版本标签的提交必须在允许的发布分支中。
+- `main` 和有效稳定版本标签都会更新配对镜像的 `latest`；版本标签的提交必须在允许的发布分支中。
 - NC 复用已有 PostgreSQL 16，应用库/角色为 `linkora`，隔离测试库/角色为 `linkora_test`。不停止或重建共享 PG 服务。
 
 ## 部署到 NC

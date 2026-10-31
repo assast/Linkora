@@ -59,11 +59,11 @@
 - **THEN** CI 显示失败，不生成发布结果，不向镜像仓库推送标签
 
 ### Requirement: 主分支与版本标签发布可追溯镜像
-在 GitHub/GHCR 默认假设下，主分支提交 SHALL 在所有检查通过后发布带 `sha-<commit>` 标签的 Web/API 镜像；有效的 `vX.Y.Z` 发布标签 SHALL 发布同版本镜像，并仅在稳定发布时更新 `latest`。两个镜像 MUST 标记相同源码提交，工作流 MUST 构建触发事件对应的提交。
+在 GitHub/GHCR 默认假设下，主分支提交 SHALL 在所有检查通过后发布带 `sha-<commit>` 和 `latest` 标签的 Web/API 镜像；有效的 `vX.Y.Z` 发布标签 SHALL 发布同版本镜像并更新 `latest`。两个镜像 MUST 标记相同源码提交，工作流 MUST 构建触发事件对应的提交。
 
 #### Scenario: 主分支发布
 - **WHEN** 主分支提交通过全部检查和镜像构建
-- **THEN** GHCR 出现配对的 `<repository>-web` 与 `<repository>-api` 提交标签，可追溯到该次 Git 提交
+- **THEN** GHCR 出现配对的 `<repository>-web` 与 `<repository>-api` 提交标签和 `latest` 标签，可追溯到该次 Git 提交
 
 #### Scenario: 发布版本
 - **WHEN** 位于允许发布分支上的提交被标记为 `v0.1.0` 并通过检查

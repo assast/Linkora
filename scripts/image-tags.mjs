@@ -10,7 +10,8 @@ export function imageMetadata(repository, ref, sha, component) {
     const version = ref.slice('refs/tags/'.length);
     if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error('发布标签必须为稳定版本 vX.Y.Z');
     tags.push(`${image}:${version}`, `${image}:latest`);
-  } else if (ref !== 'refs/heads/main') throw new Error('此引用不能发布镜像');
+  } else if (ref === 'refs/heads/main') tags.push(`${image}:latest`);
+  else throw new Error('此引用不能发布镜像');
   return { image, tags, sha };
 }
 

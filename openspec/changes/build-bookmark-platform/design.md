@@ -150,7 +150,7 @@ Compose 使用已发布的 Web/API 同版本标签，而非要求服务器克隆
 
 ### 10. GitHub Actions + GHCR 发布
 
-代码纳入 Git，提交锁文件、迁移和 Docker 构建文件。拉取请求运行 lint、类型检查、前后端测试、生产构建与镜像构建检查，不发布镜像。主分支检查成功后发布 `sha-<commit>` 镜像；`vX.Y.Z` 标签通过相同检查后发布对应版本，稳定发布才更新 `latest`。
+代码纳入 Git，提交锁文件、迁移和 Docker 构建文件。拉取请求运行 lint、类型检查、前后端测试、生产构建与镜像构建检查，不发布镜像。主分支检查成功后发布 `sha-<commit>` 与 `latest` 镜像；`vX.Y.Z` 标签通过相同检查后发布对应版本与 `latest`。
 
 代码仓库为 `https://github.com/assast/Linkora`，本地 `origin` 指向该地址。镜像采用 `ghcr.io/assast/linkora-web` 和 `ghcr.io/assast/linkora-api`，两者记录相同提交与版本。发布使用工作流内置令牌及所需的 packages 写入权限；部署端仅需拉取权限。标签构建检出被标记的提交，并验证发布分支条件，避免发布错误源码。
 

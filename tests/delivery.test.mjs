@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { imageMetadata } from '../scripts/image-tags.mjs';
 
 const sha = 'a'.repeat(40);
-test('主分支只发布提交标签，前后端指向相同提交', () => {
+test('主分支发布提交和 latest 标签，前后端指向相同提交', () => {
   for (const component of ['web', 'api']) {
     const value = imageMetadata('Owner/Linkora', 'refs/heads/main', sha, component);
-    assert.deepEqual(value.tags, [`ghcr.io/owner/linkora-${component}:sha-${sha}`]);
+    assert.deepEqual(value.tags, [`ghcr.io/owner/linkora-${component}:sha-${sha}`, `ghcr.io/owner/linkora-${component}:latest`]);
     assert.equal(value.sha, sha);
   }
 });

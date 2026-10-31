@@ -56,10 +56,10 @@ API 测试连接真实 PG，覆盖身份、继承私密、授权搜索/统计/�
 
 ## 容器交付
 
-按当前实施顺序先完成本地服务验证。Docker 镜像由 GitHub Actions 构建并发布到 GHCR 后，再到 NC 验证运行。项目远端为 `https://github.com/assast/Linkora`；实际推送、首次发布及 NC 容器验收尚未执行。
+Docker 镜像由 GitHub Actions 构建并发布到 GHCR，再部署到 NC；发布规则和验收记录见 [Git 镜像交付与 NC 验证](docs/deployment.md)。
 
 - PR：检查、测试、生产构建与 Docker 构建检查，不发布镜像。
-- `main`：检查成功后发布前后端 `sha-<完整提交>` 镜像。
+- `main`：检查成功后发布前后端 `sha-<完整提交>` 与 `latest` 镜像。
 - `vX.Y.Z`：校验源码位于允许的发布分支，发布配对版本并更新 `latest`。
 - 镜像名：`ghcr.io/assast/linkora-web` 与 `ghcr.io/assast/linkora-api`。
 - Compose 仅运行 Web/API，复用 NC 的现有 PG；API 容器启动时先执行数据库迁移，失败则不启动服务。
