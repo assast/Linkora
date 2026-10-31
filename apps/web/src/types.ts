@@ -19,7 +19,7 @@ export interface Impact {
 export type Operation = 'MOVE_CATEGORY' | 'ADD_TAGS' | 'REMOVE_TAGS' | 'REPLACE_TAGS' | 'SET_FAVORITE' | 'SET_PRIVACY' | 'DELETE' | 'EXPORT';
 export const flattenCategories = (nodes: Category[]): Category[] => nodes.flatMap(node => [node, ...flattenCategories(node.children)]);
 export const domain = (value: string) => { try { return new URL(value).hostname.replace(/^www\./, ''); } catch { return 'example.com'; } };
-export const defaults: Preferences = { theme: 'light', defaultEngine: 'google', defaultView: 'list', expandedCategories: [] };
+export const defaults: Preferences = { theme: 'light', defaultEngine: 'google', defaultView: 'grid', expandedCategories: [] };
 export const engines = [
   { id: 'google', name: 'Google', color: '#4285f4', template: 'https://www.google.com/search?q=' },
   { id: 'bing', name: 'Bing', color: '#12a9b6', template: 'https://www.bing.com/search?q=' },

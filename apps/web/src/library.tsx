@@ -35,6 +35,26 @@ export function LibraryPage() {
   const query = useQuery({ queryKey: ['data', app.scope, 'bookmarks', requestParams.toString()], enabled: app.ready,
     queryFn: ({ signal }) => app.call<Page>('/bookmarks?' + requestParams.toString(), { signal }) });
   const category = app.flatCategories.find(item => item.id === params.get('categoryId'));
+  const categoryBooks = useQuery({ queryKey: ['data', app.scope, 'category-bookmarks', category?.id], enabled: app.ready && !!category,
+    queryFn: async ({ signal }) => {
+      const books: Bookmark[] = [];
+      for (let page = 1; ; page++) {
+        const search = new URLSearchParams({ categoryId: category!.id, includeDescendants: 'true', page: String(page), pageSize: '100', sort: 'oldest' });
+        const result = await app.call<Page>('/bookmarks?' + search, { signal });
+        books.push(...result.items);
+        if (!result.items.length || page * result.pageSize >= result.total) return books;
+      }
+    } });
+  const openCategoryBooks = () => {
+    const books = categoryBooks.data || [];
+    let opened = 0;
+    for (const book of books) {
+      const tab = window.open('about:blank', '_blank');
+      if (!tab) { toast.error(`浏览器拦截了批量打开（已打开 ${opened}/${books.length}），请允许本站弹出窗口后重试`); break; }
+      tab.opener = null; tab.location.replace(book.url); opened++;
+      if (app.identity.authenticated) void app.call(`/bookmarks/${book.id}/visits`, { method: 'POST' }).catch(() => {});
+    }
+  };
   const title = category?.name || (params.get('filter') === 'starred' ? '星标收藏' : params.get('privacy') === 'private' ? '私密书签' : '全部书签');
   const changeFilter = (name: string, value: string) => {
     const next = new URLSearchParams(params); if (value) next.set(name, value); else next.delete(name); next.delete('page'); if (name === 'favorite') next.delete('filter'); setParams(next);
@@ -77,10 +97,13 @@ export function LibraryPage() {
 
   return <main className="page"><div className="page-head"><div><h1>{title}</h1><div className="subline">共 {query.data?.total ?? '—'} 条书签 · {app.identity.authenticated ? '普通与私密收藏，统一整理' : '访客浏览公开内容，登录后查看全部'}</div>{category && <div className="folder-path"><Icon name="folder" /><b>{category.path}</b></div>}</div>
     <div className="page-ops"><Button onClick={() => app.openCategory(undefined, category?.id)}><Icon name="folderPlus" />新建分类</Button><Button className="primary" onClick={app.addBookmark}><Icon name="plus" />添加书签</Button></div></div>
+    {category && <div className="category-actions"><Button disabled={!categoryBooks.data?.length} onClick={openCategoryBooks}><Icon name="external" />打开全部书签</Button>
+      {categoryBooks.isError ? <Button onClick={() => void categoryBooks.refetch()}>重新加载分类书签</Button>
+        : <span>{categoryBooks.isPending ? '正在加载分类书签…' : `共 ${categoryBooks.data?.length ?? 0} 条 · 包含子分类`}</span>}</div>}
     <div className="library-toolbar"><label className="field-search"><Icon name="search" /><input id="library-search" aria-label="搜索书签" placeholder="搜索书签名称、域名、标签或路径…" value={params.get('keyword') || ''} onChange={event => changeFilter('keyword', event.target.value)} /></label>
       <Button className={showFilters ? 'soft' : ''} onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}><Icon name="filter" />筛选</Button>
       <select className="control-select" aria-label="排序" value={params.get('sort') || 'newest'} onChange={event => changeFilter('sort', event.target.value)}><option value="newest">最近添加</option><option value="oldest">最早添加</option><option value="frequent">访问最多</option><option value="title">名称 A–Z</option></select>
-      <div className="view-control"><button className={app.preferences.defaultView === 'list' ? 'active' : ''} title="紧凑列表" aria-label="紧凑列表" onClick={() => void app.updatePreferences({ defaultView: 'list' })}><Icon name="list" /></button><button className={app.preferences.defaultView === 'grid' ? 'active' : ''} title="紧凑卡片" aria-label="紧凑卡片" onClick={() => void app.updatePreferences({ defaultView: 'grid' })}><Icon name="grid" /></button></div>
+      <div className="view-control"><button className={app.preferences.defaultView === 'list' ? 'active' : ''} title="紧凑列表" aria-label="紧凑列表" aria-pressed={app.preferences.defaultView === 'list'} onClick={() => void app.updatePreferences({ defaultView: 'list' })}><Icon name="list" /></button><button className={app.preferences.defaultView === 'grid' ? 'active' : ''} title="紧凑卡片" aria-label="紧凑卡片" aria-pressed={app.preferences.defaultView === 'grid'} onClick={() => void app.updatePreferences({ defaultView: 'grid' })}><Icon name="grid" /></button></div>
     </div>
     {showFilters && <div className="filter-panel panel"><label>星标<select className="control-select" value={params.get('favorite') || ''} onChange={event => changeFilter('favorite', event.target.value)}><option value="">全部</option><option value="true">仅星标</option><option value="false">未星标</option></select></label>
       {app.identity.authenticated && <label>可见性<select className="control-select" value={params.get('privacy') || 'all'} onChange={event => changeFilter('privacy', event.target.value)}><option value="all">全部</option><option value="public">普通</option><option value="private">私密</option></select></label>}

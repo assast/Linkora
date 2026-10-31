@@ -11,7 +11,7 @@ export type ActiveDialog = null | { kind: 'login' | 'account' | 'manager' } | { 
 function guestPreferences(): Preferences {
   try {
     const value = JSON.parse(localStorage.getItem('linkora.guest.preferences') || '{}') as Partial<Preferences>;
-    return { theme: value.theme === 'dark' ? 'dark' : 'light', defaultView: value.defaultView === 'grid' ? 'grid' : 'list',
+    return { theme: value.theme === 'dark' ? 'dark' : 'light', defaultView: value.defaultView === 'list' ? 'list' : 'grid',
       defaultEngine: ['google', 'bing', 'baidu', 'duck', 'github'].includes(value.defaultEngine || '') ? value.defaultEngine! : 'google',
       expandedCategories: Array.isArray(value.expandedCategories) ? value.expandedCategories.filter(id => typeof id === 'string') : [] };
   } catch { return defaults; }
@@ -76,12 +76,15 @@ function useAppState() {
   const preferencesQuery = useQuery({ queryKey: ['data', scope, 'preferences'], enabled: ready && identity.authenticated,
     queryFn: ({ signal }) => call<Preferences>('/preferences', { signal }) });
   const [guest, setGuest] = useState(guestPreferences);
-  const preferences = identity.authenticated ? preferencesQuery.data || defaults : guest;
+  const preferences = { ...(identity.authenticated ? preferencesQuery.data || defaults : guest), defaultView: guest.defaultView };
   useEffect(() => { document.documentElement.dataset.theme = preferences.theme; }, [preferences.theme]);
   const updatePreferences = async (patch: Partial<Preferences>) => {
-    if (!identity.authenticated) {
-      const next = { ...guest, ...patch }; setGuest(next); localStorage.setItem('linkora.guest.preferences', JSON.stringify(next)); return;
+    if (!identity.authenticated || patch.defaultView) {
+      const next = { ...guest, ...(identity.authenticated ? { defaultView: patch.defaultView! } : patch) };
+      setGuest(next);
+      try { localStorage.setItem('linkora.guest.preferences', JSON.stringify(next)); } catch { /* 禁用存储时仍允许切换视图。 */ }
     }
+    if (!identity.authenticated) return;
     const key = ['data', scope, 'preferences'];
     const old = preferences;
     client.setQueryData(key, { ...old, ...patch });

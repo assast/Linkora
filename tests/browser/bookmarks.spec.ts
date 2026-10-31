@@ -113,6 +113,8 @@ test('分类、继承私密表单、批量预览与导出删除', async ({ page,
     expect(saved.isPrivate).toBe(false); expect(saved.effectivePrivate).toBe(true);
     await page.screenshot({ path: info.outputPath('owner-editor.png') });
     await page.goto('/bookmarks?keyword=' + suffix);
+    await expect(page.locator('.bookmark-tile')).toHaveCount(2);
+    await page.getByRole('button', { name: '紧凑列表', exact: true }).click();
     await expect(page.locator('.bookmark-row')).toHaveCount(2);
     await page.getByRole('button', { name: '紧凑卡片', exact: true }).click();
     await expect(page.locator('.bookmark-tile')).toHaveCount(2);
