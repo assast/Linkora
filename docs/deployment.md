@@ -4,16 +4,17 @@
 
 ## 发布输入
 
-- 确定代码仓库地址。当前工作流按 GitHub Actions + GHCR 实现；如使用 Gitea，应调整工作流平台、认证与镜像地址。
-- 配对发布 `<repository>-web` 与 `<repository>-api`，使用同一个 `sha-<完整提交>` 或 `vX.Y.Z` 标签。
+- 代码仓库为 <https://github.com/assast/Linkora>，本地 `origin` 使用该地址。工作流使用 GitHub Actions + GHCR；首次发布前确认 Actions 权限及镜像可见性。
+- 配对发布 `ghcr.io/assast/linkora-web` 与 `ghcr.io/assast/linkora-api`，部署配置使用 `IMAGE_REPOSITORY=ghcr.io/assast/linkora`，两个镜像使用同一个 `sha-<完整提交>` 或 `vX.Y.Z` 标签。
+- Web 直接通过 `http://10.144.144.10:8080` 提供访问，并加入现有 `proxy_network`，由 Traefik 按 `nav.icio.eu.org` 路由。正式登录源使用 `https://nav.icio.eu.org`；域名的 Cloudflare Tunnel 公开主机名需指向现有 Traefik HTTP 入口。
 - `main` 发布提交标签，稳定版本发布才更新 `latest`；版本标签的提交必须在允许的发布分支中。
 - NC 复用已有 PostgreSQL 16，应用库/角色为 `linkora`，隔离测试库/角色为 `linkora_test`。不停止或重建共享 PG 服务。
 
 ## 部署到 NC
 
 1. 在 NC 的 Dockge stacks 下为本项目创建独立目录，放置 `deploy/compose.yaml` 和私有环境配置；当前 NC stacks 位于 `/docker/dockge/stacks/`。
-2. 按 `deploy/.env.example` 配置镜像前缀、配对版本、数据库连接和 HTTPS 站点地址。私有镜像使用仅有拉取权限的凭据登录镜像仓库。
-3. 检查选用端口未占用，按需绑定 NC 私网地址；HTTPS 通过已有入口代理提供，`SITE_URL` 必须与浏览器访问源相同。
+2. 按 `deploy/.env.example` 配置镜像前缀、配对版本、数据库连接和 `https://nav.icio.eu.org` 站点地址。私有镜像使用仅有拉取权限的凭据登录镜像仓库。
+3. 确认 `10.144.144.10:8080` 未占用；Web 同时加入 `proxy_network`。Cloudflare Tunnel 的 `nav.icio.eu.org` 公开主机名指向 Traefik HTTP 入口，`SITE_URL` 必须与浏览器访问源相同。
 4. 执行 Compose 拉取和启动。API 先部署迁移，成功后启动；Web 等待 API 健康检查通过。
 5. 用 `deploy/init-owner.sh` 初始化唯一所有者；已有账号时命令拒绝覆盖。正式账号和数据不加载测试夹具。
 6. 以访客和所有者分别验证首页、列表、搜索、分类统计、私密直达请求和批量操作，再核对镜像源码提交标签。
@@ -49,4 +50,4 @@ docker exec ai-postgres psql -U linkora_test -d linkora_restore_test -c 'SELECT 
 
 ## 待实机记录
 
-实际仓库地址、首次 CI 运行、镜像标签/摘要、NC 容器健康状态、恢复核对和回退演练结果，在 Git 打包后的 NC 验证阶段补入。当前不能提前填写为通过。
+代码仓库已确定为 <https://github.com/assast/Linkora>。首次 CI 运行、镜像可见性与标签/摘要、NC 容器健康状态、恢复核对和回退演练结果，在 Git 打包后的 NC 验证阶段补入。当前不能提前填写为通过。

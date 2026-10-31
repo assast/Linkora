@@ -1,6 +1,8 @@
-# Linkora / MarkSpace
+# Linkora
 
 参考 MarkSpace V3 的前后端分离书签系统。React + TypeScript + Vite 前端、NestJS 后端，连接 NC 的 PostgreSQL 16；单所有者管理，访客只读普通内容。
+
+源码仓库：<https://github.com/assast/Linkora>，界面右上角的“项目源码”按钮也可直接打开仓库。
 
 ## 本地运行
 
@@ -36,6 +38,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:delivery
+pnpm test:skill
 pnpm build
 ```
 
@@ -53,12 +56,12 @@ API 测试连接真实 PG，覆盖身份、继承私密、授权搜索/统计/�
 
 ## 容器交付
 
-按当前实施顺序先完成本地服务验证。Docker 镜像由 Git 平台构建后，再到 NC 验证运行。工作流暂按 GitHub Actions + GHCR 编写，实际代码仓库地址待配置。
+按当前实施顺序先完成本地服务验证。Docker 镜像由 GitHub Actions 构建并发布到 GHCR 后，再到 NC 验证运行。项目远端为 `https://github.com/assast/Linkora`；实际推送、首次发布及 NC 容器验收尚未执行。
 
 - PR：检查、测试、生产构建与 Docker 构建检查，不发布镜像。
 - `main`：检查成功后发布前后端 `sha-<完整提交>` 镜像。
 - `vX.Y.Z`：校验源码位于允许的发布分支，发布配对版本并更新 `latest`。
-- 镜像名：`ghcr.io/<owner>/<repository>-web` 与 `ghcr.io/<owner>/<repository>-api`。
+- 镜像名：`ghcr.io/assast/linkora-web` 与 `ghcr.io/assast/linkora-api`。
 - Compose 仅运行 Web/API，复用 NC 的现有 PG；API 容器启动时先执行数据库迁移，失败则不启动服务。
 
 将 `deploy/.env.example` 复制为 `deploy/.env`，填入镜像前缀、同一版本、NC 专用数据库和 HTTPS 站点地址，然后在目标服务器执行：
@@ -80,3 +83,9 @@ sh deploy/init-owner.sh
 上线前保存 PG 原生备份，并验证恢复到独立空库后，分类引用、标签、私密规则及登录保持一致。应用回退使用已验证兼容当前数据库的前一配对镜像；如数据结构不兼容，需停止写入并恢复数据库备份，切换镜像不会自动回滚数据库。
 
 具体步骤见 [Git 镜像交付与 NC 验证](docs/deployment.md)。
+
+## Agent 管理技能
+
+项目内提供 [linkora-management](skill/linkora-management/SKILL.md)，用于通过 API 管理分类、书签、标签、批量操作和导出，以及检查部署状态、备份和配对镜像版本。技能附带仅依赖 Python 3 标准库的客户端，处理会话 Cookie 与 CSRF；服务地址和凭据由运行环境提供。
+
+让 agent 读取该 `SKILL.md`，或将 `skill/linkora-management` 安装到 agent 的技能目录后使用 `$linkora-management`。技能不包含正式凭据，也不会因读取而自动发布或部署。

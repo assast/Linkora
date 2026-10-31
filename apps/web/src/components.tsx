@@ -2,8 +2,9 @@ import { useId, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } 
 import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowLeft, ArrowRight, Bookmark as BookmarkIcon, Check, ChevronDown, ChevronRight, Download, ExternalLink, Filter, Folder, FolderPlus, Github, Grid2X2, Link as LinkIcon, List, LoaderCircle, Lock, LogOut, Menu, Moon, MoreHorizontal, Plus, Save, Search, Settings, ShieldCheck, Star, Sun, Tag, Trash2, Unlock, X } from 'lucide-react';
 import { domain } from './types';
+import { APP_NAME } from './constants';
 
-const icons = { back: ArrowLeft, arrow: ArrowRight, bookmark: BookmarkIcon, check: Check, down: ChevronDown, right: ChevronRight, download: Download, external: ExternalLink, filter: Filter, folder: Folder, folderPlus: FolderPlus, grid: Grid2X2, link: LinkIcon, list: List, loading: LoaderCircle, lock: Lock, logout: LogOut, menu: Menu, moon: Moon, more: MoreHorizontal, plus: Plus, save: Save, search: Search, settings: Settings, shield: ShieldCheck, star: Star, sun: Sun, tag: Tag, trash: Trash2, unlock: Unlock, x: X };
+const icons = { back: ArrowLeft, arrow: ArrowRight, bookmark: BookmarkIcon, check: Check, down: ChevronDown, right: ChevronRight, download: Download, external: ExternalLink, filter: Filter, folder: Folder, folderPlus: FolderPlus, github: Github, grid: Grid2X2, link: LinkIcon, list: List, loading: LoaderCircle, lock: Lock, logout: LogOut, menu: Menu, moon: Moon, more: MoreHorizontal, plus: Plus, save: Save, search: Search, settings: Settings, shield: ShieldCheck, star: Star, sun: Sun, tag: Tag, trash: Trash2, unlock: Unlock, x: X };
 export function Icon({ name, className = '' }: { name: keyof typeof icons; className?: string }) {
   const Component = icons[name];
   return <Component className={`icon ${className}`} aria-hidden="true" />;
@@ -16,7 +17,7 @@ export function SiteIcon({ title, url }: { title: string; url: string }) {
   const colors = ['#8976db', '#56a6cf', '#429f91', '#cf9874', '#b47eb0', '#b39b63'];
   const color = colors[[...host].reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length];
   return <span className={`fav-ico ${host === 'github.com' ? 'github' : ''}`} style={{ '--favicon-bg': color } as CSSProperties}>
-    {host === 'github.com' ? <Github size={17} aria-hidden="true" /> : title.slice(0, 1).toUpperCase() || 'M'}
+    {host === 'github.com' ? <Github size={17} aria-hidden="true" /> : title.slice(0, 1).toUpperCase() || APP_NAME[0]}
   </span>;
 }
 export function Modal({ open = true, title, description, children, onClose, wide = false }: { open?: boolean; title: string; description?: string; children: ReactNode; onClose: () => void; wide?: boolean }) {

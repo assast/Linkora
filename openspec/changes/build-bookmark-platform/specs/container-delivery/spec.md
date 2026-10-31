@@ -1,5 +1,16 @@
 ## ADDED Requirements
 
+### Requirement: 指定 Git 远端与 agent 管理技能
+项目 SHALL 将本地 Git 的 `origin` 设置为 `https://github.com/assast/Linkora`，并在 `skill/linkora-management` 提供中文服务管理技能、API 会话客户端和运维参考。技能 SHALL 支持通过已授权 API 管理内容，保留继承私密、变更预览和修订号规则，不包含正式凭据。
+
+#### Scenario: agent 使用已搭建服务
+- **WHEN** agent 读取技能并获得目标站点与所有者凭据
+- **THEN** 可以复用站点隔离的会话执行查询及授权操作，写入携带 Origin 与 CSRF，不通过直接修改数据库绕过业务规则
+
+#### Scenario: 仅配置仓库地址
+- **WHEN** 用户要求设置 Git 远端但尚未要求实际推送或部署
+- **THEN** 本地 origin 指向指定地址，文档明确镜像地址，不据此触发推送、发布或 NC 部署
+
 ### Requirement: 工程通过 Git 管理且可复现构建
 项目 SHALL 将前端、后端、锁文件、数据库迁移、容器配置和工作流纳入同一 Git 仓库，并提供统一的检查与构建命令。实际凭据、数据库备份和构建产物 MUST 排除在版本管理之外。
 

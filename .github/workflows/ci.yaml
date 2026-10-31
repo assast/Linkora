@@ -40,6 +40,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:delivery
+      - run: pnpm test:skill
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e

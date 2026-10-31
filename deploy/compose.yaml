@@ -24,7 +24,15 @@ services:
         condition: service_healthy
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:80"
-    networks: [app]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy_network
+      traefik.http.routers.linkora.rule: Host(`nav.icio.eu.org`)
+      traefik.http.routers.linkora.entrypoints: web
+      traefik.http.services.linkora.loadbalancer.server.port: "80"
+    networks: [app, proxy_network]
 networks:
   app:
     driver: bridge
+  proxy_network:
+    external: true

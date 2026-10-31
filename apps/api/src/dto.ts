@@ -41,7 +41,7 @@ export class CategoryPatchDto extends IntersectionType(PartialType(CategoryDto, 
 
 export class BookmarkDto {
   @ApiProperty({ maxLength: 200 }) @Transform(trim) @IsString() @MinLength(1) @MaxLength(200) title!: string;
-  @ApiProperty({ maxLength: 4096 }) @Transform(trim) @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false }) @MaxLength(4096) url!: string;
+  @ApiProperty({ maxLength: 4096 }) @Transform(trim) @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false, allow_underscores: true }) @MaxLength(4096) url!: string;
   @ApiProperty({ required: false, nullable: true }) @ValidateIf((_, v) => v !== undefined && v !== null) @IsUUID() categoryId?: string | null;
   @ApiProperty({ required: false }) @ValidateIf(optional) @IsString() @MaxLength(1000) description?: string;
   @ApiProperty({ required: false }) @ValidateIf(optional) @IsString() @MaxLength(10000) notes?: string;

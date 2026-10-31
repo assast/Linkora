@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Button, Icon, Modal } from './components';
+import { APP_NAME } from './constants';
 import { errorMessage, useApp, type ConfirmOptions } from './state';
 import { flattenCategories, type Category } from './types';
 import { StaleSessionError } from './api';
@@ -14,7 +15,7 @@ function LoginDialog() {
     catch (error) { if (!(error instanceof StaleSessionError)) setError(errorMessage(error)); }
     finally { setBusy(false); }
   };
-  return <Modal title="登录 MarkSpace" description="登录后查看与管理全部收藏，私密内容无需再次解锁。" onClose={() => app.closeDialog()}>
+  return <Modal title={`登录 ${APP_NAME}`} description="登录后查看与管理全部收藏，私密内容无需再次解锁。" onClose={() => app.closeDialog()}>
     <form onSubmit={submit}><div className="field"><label htmlFor="login-email">邮箱</label><input id="login-email" name="email" type="email" required autoComplete="username" autoFocus /></div>
       <div className="field"><label htmlFor="login-password">密码</label><input id="login-password" name="password" type="password" required minLength={8} maxLength={1024} autoComplete="current-password" /></div>
       {error && <p className="modal-error" role="alert">{error}</p>}<div className="modal-footer"><Button onClick={() => app.closeDialog()}>取消</Button><Button className="primary" type="submit" disabled={busy}><Icon name={busy ? 'loading' : 'unlock'} />{busy ? '正在登录' : '登录'}</Button></div>

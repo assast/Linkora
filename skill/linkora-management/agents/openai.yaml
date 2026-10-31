@@ -1,0 +1,4 @@
+interface:
+  display_name: "Linkora 服务管理"
+  short_description: "通过安全会话管理 Linkora 收藏、分类、批量操作及服务运维"
+  default_prompt: "使用 $linkora-management 检查我的 Linkora 服务，并按要求管理书签与分类。"

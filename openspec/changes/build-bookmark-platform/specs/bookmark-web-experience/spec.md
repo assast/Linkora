@@ -1,5 +1,12 @@
 ## ADDED Requirements
 
+### Requirement: Linkora 品牌与源码仓库入口
+前端 SHALL 在运行界面、页面标题、登录及欢迎文案使用 Linkora 品牌，并在顶栏提供带有可见“项目源码”文字的 GitHub 仓库链接，指向 `https://github.com/assast/Linkora`。链接 SHALL 在新标签页安全打开，桌面与移动端均可使用，不能仅以图标表达入口用途。
+
+#### Scenario: 访客打开源码仓库
+- **WHEN** 访客在桌面或移动端点击顶栏的 GitHub 仓库入口
+- **THEN** 新标签页打开指定仓库，原页面保持当前浏览状态且不授予外部页面 opener 访问
+
 ### Requirement: 三类页面延续 V3 视觉基准
 前端 SHALL 提供导航首页、书签管理、新增/编辑三类核心页面，以参考 HTML 的布局和密度为基准，使用约 240px 桌面侧栏、49px 列表行高、偏紫主色与轻边框，默认紧凑列表并提供小卡片视图。
 
