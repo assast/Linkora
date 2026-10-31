@@ -17,7 +17,7 @@ function Notifications() {
     viewport.addEventListener('change', update);
     return () => viewport.removeEventListener('change', update);
   }, []);
-  return <Toaster richColors position={mobile ? 'top-center' : 'bottom-right'} offset={mobile ? 72 : 32} mobileOffset={mobile ? 72 : 16} visibleToasts={mobile ? 1 : 3} closeButton />;
+  return <Toaster richColors position={mobile ? 'top-center' : 'bottom-right'} offset={mobile ? 72 : 32} mobileOffset={mobile ? 72 : 16} visibleToasts={mobile ? 1 : 3} closeButton={!mobile} style={mobile ? { pointerEvents: 'none' } : undefined} />;
 }
 
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={client}><BrowserRouter><AppProvider><App /><Notifications /></AppProvider></BrowserRouter></QueryClientProvider>);
