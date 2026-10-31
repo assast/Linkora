@@ -124,6 +124,7 @@ test('分类、继承私密表单、批量预览与导出删除', async ({ page,
     await page.getByRole('button', { name: '紧凑列表', exact: true }).click();
     await expect.poll(async () => (await (await call('GET', '/preferences')).json()).defaultView).toBe('list');
     await expect(page.locator('.bookmark-row')).toHaveCount(2);
+    await page.getByRole('button', { name: '多选', exact: true }).click();
     await page.getByRole('checkbox', { name: '全选当前页', exact: true }).check();
     await page.getByLabel('批量操作', { exact: true }).selectOption('ADD_TAGS');
     await page.getByLabel('批量标签').fill('界面验证');
