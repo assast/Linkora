@@ -16,4 +16,6 @@ backups/
 *.dump
 .cache/
 .code-review-graph/
+.codex/
+.idea/
 *.tsbuildinfo
