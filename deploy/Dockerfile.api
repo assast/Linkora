@@ -19,6 +19,7 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /runtime /app
 COPY --chmod=755 deploy/start-api.sh /app/start-api.sh
+RUN mkdir -p /app/data/site-icons /app/data/icon-uploads && chown -R node:node /app/data/site-icons /app/data/icon-uploads
 USER node
 EXPOSE 3000
 ENTRYPOINT ["/app/start-api.sh"]

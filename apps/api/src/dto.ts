@@ -41,6 +41,11 @@ export class CategoryDto {
 }
 export class CategoryPatchDto extends IntersectionType(PartialType(CategoryDto, { skipNullProperties: false }), ConfirmationDto) {}
 
+export class CategoryReorderDto {
+  @ApiProperty({ format: 'uuid' }) @IsUUID() targetId!: string;
+  @ApiProperty({ enum: ['before', 'after'] }) @IsIn(['before', 'after']) position!: 'before' | 'after';
+}
+
 export class BookmarkDto {
   @ApiProperty({ maxLength: 200 }) @Transform(trim) @IsString() @MinLength(1) @MaxLength(200) title!: string;
   @ApiProperty({ maxLength: 4096 }) @Transform(trim) @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false, allow_underscores: true }) @MaxLength(4096) url!: string;

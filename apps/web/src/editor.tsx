@@ -6,6 +6,7 @@ import { Button, Empty, Icon, Loading, QueryError, SiteIcon } from './components
 import { errorMessage, useApp } from './state';
 import { StaleSessionError } from './api';
 import { domain, type Bookmark } from './types';
+import { BookmarkIconEditor } from './bookmark-icons';
 
 function BookmarkForm({ initial }: { initial?: Bookmark }) {
   const app = useApp(); const navigate = useNavigate();
@@ -39,7 +40,7 @@ function BookmarkForm({ initial }: { initial?: Bookmark }) {
       <div className="check-area"><label className="check-card"><input type="checkbox" checked={form.isFavorite} onChange={event => setForm({ ...form, isFavorite: event.target.checked })} /><span><strong>设为星标书签</strong><small>显示在首页常用快捷方式</small></span></label>
         <label className="check-card"><input type="checkbox" checked={inherited || form.isPrivate} disabled={inherited} onChange={event => setForm({ ...form, isPrivate: event.target.checked })} /><span><strong>设为私密书签</strong><small>{inherited ? '继承私密分类属性，无法取消' : form.isPrivate ? '仅登录后可见' : '普通书签对访客可见'}</small></span></label></div>
       {error && <p className="modal-error" role="alert">{error}</p>}<div className="editor-actions"><Button type="submit" className="primary" disabled={busy}><Icon name="save" />{busy ? '保存中…' : initial ? '保存修改' : '保存书签'}</Button><Button onClick={() => navigate('/bookmarks')}>取消</Button><span className="push" />{initial && <Button className="danger" onClick={() => void remove()}><Icon name="trash" />删除</Button>}</div>
-    </form><aside className="editor-side"><div className="panel preview-box"><h3>实时预览</h3><div className="preview-inline"><SiteIcon title={form.title || '网站名称'} url={form.url} /><span className="wrap"><strong className="truncate">{form.title || '网站名称'}</strong><small>{domain(form.url)}</small></span></div><p className="preview-desc">{form.description || '网站说明将展示在这里'}</p><div className="summary-line"><span>所属分类</span><strong>{category?.path || '未分类'}</strong></div><div className="summary-line"><span>隐私设置</span><strong>{inherited || form.isPrivate ? '私密 · 仅登录后可见' : '普通 · 访客可见'}</strong></div><div className="security-note"><Icon name="shield" />私密内容与普通收藏统一管理。退出登录后，私密内容自动隐藏。</div></div></aside></div>
+    </form><aside className="editor-side"><div className="panel preview-box"><h3>实时预览</h3><div className="preview-inline"><SiteIcon title={form.title || '网站名称'} url={form.url} bookmarkId={initial && form.url === initial.url ? initial.id : undefined} /><span className="wrap"><strong className="truncate">{form.title || '网站名称'}</strong><small>{domain(form.url)}</small></span></div><p className="preview-desc">{form.description || '网站说明将展示在这里'}</p><div className="summary-line"><span>所属分类</span><strong>{category?.path || '未分类'}</strong></div><div className="summary-line"><span>隐私设置</span><strong>{inherited || form.isPrivate ? '私密 · 仅登录后可见' : '普通 · 访客可见'}</strong></div><div className="security-note"><Icon name="shield" />私密内容与普通收藏统一管理。退出登录后，私密内容自动隐藏。</div></div><BookmarkIconEditor bookmark={initial} url={form.url} /></aside></div>
   </>;
 }
 

@@ -92,3 +92,21 @@ python3 scripts/linkora.py request POST /bookmarks/export --body-file /tmp/linko
 ```
 
 批量修改在一个 PG 事务中全成或全败，无部分成功。导出包含格式版本、时间、选中书签、标签与必要分类祖先，保留原始私密标志；不含账号凭据。JSON 导出只备份选中内容，完整服务恢复仍需 PG 原生备份。
+## 书签图标管理补充接口
+
+图标配置不加入旧书签 CRUD 或 JSON 导出字段。以下路径以 `/api/v1` 为前缀；所有配置/图标库/任务接口均需所有者会话，写请求同时需要 Origin 和 CSRF。只有书签图标 GET 沿用公开书签可访客读取、私密及未知书签 404 的规则。
+
+| 接口 | 用途 |
+| --- | --- |
+| `GET /bookmarks/:id/icon` | 当前有效图标图片，或无图时 204；no-store |
+| `GET /bookmarks/:id/icon-config` | 来源、可空版本、Dashboard 条目和 uploaded 状态 |
+| `PATCH /bookmarks/:id/icon-config` | `{source: "auto", expectedVersion: null或UUID}`，或增加 `source: "dashboard", dashboardId` |
+| `POST /bookmarks/:id/icon-upload` | multipart：`file` 和 `expectedVersion`；初次版本传字符串 `null` |
+| `GET /icon-library?keyword=&page=1&pageSize=24` | 本地图标目录，最多每页 60 项 |
+| `GET /icon-library/:id/preview` | 同源 PNG/WebP 预览，无图 204 |
+| `POST /icon-refresh-jobs` | `{scope: "selected", bookmarkIds: [...]}` 或 `{scope: "all"}`，成功 202 |
+| `GET /icon-refresh-jobs/:id?page=1&pageSize=24` | 状态、计数、站点进度和分页结果 |
+
+来源变更与上传必须携带读取时的 `expectedVersion`；冲突为 409（`ICON_CONFIG_CHANGED`），重新读取配置后由用户决定是否再次提交。上传最多 2 MiB，只接受静态 PNG/JPEG/WebP，参数不能指定外部 URL 或文件路径。
+
+刷新 selected 去重后为 1～100 个所属书签 ID，all 不允许同时带 ID。人工来源跳过，同 origin 共享一次抓取，失败保旧；成功/失败/跳过计数之和在终态等于 total。重复创建活跃任务返回 409 和 `jobId`，任务过期或 API 重启丢失返回 404。自动刷新不改变内容修订号，人工配置变更会推进修订号。

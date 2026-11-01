@@ -9,6 +9,13 @@ export interface Bookmark {
   isFavorite: boolean; visitCount: number; createdAt: string; updatedAt: string;
 }
 export interface Page { items: Bookmark[]; total: number; page: number; pageSize: number }
+export interface BookmarkIconConfig { source: 'auto' | 'dashboard' | 'upload'; version: string | null; dashboardId: string | null; uploaded: boolean }
+export interface IconLibraryPage { items: { id: string; name: string }[]; total: number; page: number; pageSize: number }
+export interface IconRefreshJob {
+  id: string; state: 'queued' | 'running' | 'completed'; total: number; processed: number; success: number; failed: number; skipped: number;
+  totalOrigins: number; processedOrigins: number; page: number; pageSize: number;
+  results: { id: string; title: string; status: 'success' | 'failed' | 'skipped'; reason: 'success' | 'failed' | 'manual' | 'blocked' | 'changed' }[];
+}
 export interface Home { frequent: Bookmark[]; recent: Bookmark[]; counts: { bookmarks: number; categories: number; favorites: number; private?: number } }
 export interface Preferences { theme: 'light' | 'dark'; defaultEngine: string; defaultView: 'list' | 'grid'; expandedCategories: string[] }
 export interface Impact {

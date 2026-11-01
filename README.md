@@ -19,6 +19,10 @@ pnpm dev
 
 `scripts/local-service.sh` 支持 `start`、`restart`、`stop`、`status` 来管理后台开发服务。运行日志写入被 Git 忽略的 `.cache/local-service/linkora.log`。
 
+更新包含数据库变更的代码后，先运行 `pnpm db:migrate`，再启动或重启本地服务。迁移命令会保留并忽略遗留空目录；非空目录缺少 `migration.sql` 时仍会报错。
+
+完整建库 SQL 位于 [`docs/SQL/init.sql`](docs/SQL/init.sql)，每次 DDL 位于 [`docs/SQL/变更记录/`](docs/SQL/变更记录/)。手工初始化、按版本升级和 Prisma 迁移历史登记见 [SQL 维护说明](docs/SQL/README.md)。
+
 应用默认没有演示账号和书签。首次设置账号时，在本地 `.env` 临时添加 `OWNER_EMAIL` 和 `OWNER_PASSWORD`（至少 8 位），执行 `pnpm owner:init`，然后移除初始密码配置。账号存在后初始化命令不会覆盖它。
 
 ## 隔离验证环境
@@ -75,6 +79,18 @@ sh deploy/init-owner.sh
 ```
 
 `init-owner.sh` 交互读取初始邮箱与密码，不把密码写到命令行或 Git。Web 端口默认只绑定本机，生产 HTTPS 由现有入口代理提供；NC 上需要私网访问时，将绑定地址设为 NC 的私有地址。仅本机容器验证可以显式启用 `ALLOW_INSECURE_HTTP=true`。
+
+### 书签图标
+
+已保存书签通过同源 API 按需加载图标。API 从网站首页抓取，只接受通过校验的 PNG、JPEG、WebP 和 ICO 文件；成功结果缓存 30 天，抓取失败或目标被禁止时冷却 24 小时。抓取有资源限制，只连接公网目标。图片加载失败时保留首字母兜底，不会拖慢书签保存和列表读取。
+
+已保存书签的编辑页可搜索选择 Dashboard Icons、上传图片或恢复自动。人工来源按书签保存，同站点书签可以设置不同图标；人工资源不可用时显示自动图标或首字母。上传接受不超过 2 MiB、最大边 4096 像素的 PNG/JPEG/WebP 静态图片，归一化为最长边 256 像素的 WebP。新增书签及已修改但未保存的网址需先保存，再设置图标。
+
+书签库支持刷新选中或全库的自动图标，编辑页也可单条刷新。刷新按站点去重、共享最多 4 个执行槽，展示成功/失败/跳过结果，保留人工选择及刷新失败前的旧图。同站点的其他自动书签也会同步更新。任务在页面导航时继续，API 重启后需重新发起；完成结果保留 30 分钟。
+
+`ICON_CACHE_DIR=.cache/site-icons` 保存可重建的自动/图标库缓存；`ICON_UPLOAD_DIR=.data/icon-uploads` 保存必须备份的上传图片，两者不可相同或嵌套。生产使用独立的 `site_icons`、`icon_uploads` 卷。本版增加图标配置表迁移，完整备份须同时保存 PostgreSQL 与上传卷；JSON 书签导出格式保持原样。清理缓存和恢复步骤见 [部署说明](docs/deployment.md)。
+
+Dashboard Icons 的 4,518 项本地目录固定到上游提交 `83f32e08257b66fbd971ac8d7645f5b38d52e85d`，图片按需经服务端缓存。更新目录运行 `node scripts/update-dashboard-icons.mjs <完整上游提交>`，审阅生成的索引及许可后随应用交付；启动与普通镜像构建不依赖实时同步上游。
 
 ## 数据与权限
 

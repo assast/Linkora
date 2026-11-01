@@ -1,40 +1,43 @@
-import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { origin, ownerApi, loginPage } from './helpers';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-
-const origin = 'http://127.0.0.1:5173';
-const email = 'owner@example.test', password = 'Test-only-password-2026!';
-
-async function ownerApi(request: APIRequestContext) {
-  const health = await request.get('/api/v1/health');
-  expect((await health.json()).verification, '浏览器写入测试只能运行于隔离验证服务').toBe(true);
-  const login = await request.post('/api/v1/auth/login', { headers: { Origin: origin }, data: { email, password } });
-  expect(login.ok()).toBeTruthy();
-  const csrf = (await login.json()).csrfToken;
-  return async (method: string, path: string, data?: unknown) => request.fetch('/api/v1' + path, { method, data, headers: { Origin: origin, 'X-CSRF-Token': csrf } });
-}
-
-async function loginPage(page: Page) {
-  await page.getByRole('banner').getByRole('button', { name: '登录', exact: true }).click();
-  await page.getByLabel('邮箱', { exact: true }).fill(email);
-  await page.getByLabel('密码', { exact: true }).fill(password);
-  await page.getByRole('dialog').getByRole('button', { name: '登录', exact: true }).click();
-  await expect(page.locator('.account-banner')).toContainText('已登录');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-}
 
 test('访客搜索、登录融合、退出清理与响应式', async ({ page, request, context }, info) => {
   const call = await ownerApi(request);
   const suffix = 'e2e-' + randomUUID().slice(0, 8);
   const ids: string[] = [];
+  const iconRequests: string[] = [], remoteImages: string[] = [];
+  page.on('request', current => {
+    if (current.resourceType() === 'image' && new URL(current.url()).origin !== origin) remoteImages.push(current.url());
+  });
   try {
     for (const isPrivate of [false, true]) {
       const response = await call('POST', '/bookmarks', { title: `${isPrivate ? '私密' : '公开'} ${suffix}`, url: 'https://example.com/' + suffix, isPrivate });
       expect(response.ok()).toBeTruthy(); ids.push((await response.json()).id);
     }
+    await context.route('**/api/v1/bookmarks/*/icon', route => {
+      const id = new URL(route.request().url()).pathname.split('/').at(-2)!;
+      iconRequests.push(id);
+      return id === ids[0]
+        ? route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/6XcAAAAASUVORK5CYII=', 'base64') })
+        : route.fulfill({ status: 204 });
+    });
     await page.goto('/bookmarks?keyword=' + suffix);
     await expect(page.getByText(`公开 ${suffix}`, { exact: true })).toBeVisible();
+    const publicIcon = page.locator(`img[src="/api/v1/bookmarks/${ids[0]}/icon"]`);
+    await expect(publicIcon).toHaveJSProperty('naturalWidth', 1);
+    expect(iconRequests).toContain(ids[0]);
+    expect(iconRequests).not.toContain(ids[1]);
+    expect(remoteImages).toEqual([]);
     await expect(page.getByRole('link').filter({ hasText: `私密 ${suffix}` })).toHaveCount(0);
+    await context.route('https://example.com/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Bookmark open test</title>' }));
+    const openedPage = page.waitForEvent('popup');
+    await page.getByRole('link').filter({ hasText: `公开 ${suffix}` }).first().click();
+    const openedBookmark = await openedPage;
+    await openedBookmark.waitForLoadState();
+    expect(new URL(openedBookmark.url()).hostname).toBe('example.com');
+    await openedBookmark.close();
     expect((await page.request.get('/api/v1/bookmarks/' + ids[1])).status()).toBe(404);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     if (info.project.name.endsWith('mobile')) {
@@ -65,6 +68,10 @@ test('访客搜索、登录融合、退出清理与响应式', async ({ page, re
     await loginPage(page);
     await page.goto('/bookmarks?keyword=' + suffix);
     await expect(page.getByRole('link').filter({ hasText: `私密 ${suffix}` })).toBeVisible();
+    await expect.poll(() => iconRequests.includes(ids[1])).toBe(true);
+    const privateIcon = page.locator('.bookmark-row, .bookmark-tile').filter({ hasText: `私密 ${suffix}` }).first().locator('.fav-ico');
+    await expect(privateIcon).toContainText('私');
+    await expect(privateIcon.locator('img')).toHaveCount(0);
     await page.reload(); await expect(page.getByRole('link').filter({ hasText: `私密 ${suffix}` })).toBeVisible();
     await page.screenshot({ path: info.outputPath('owner-library.png') });
     if (info.project.name.endsWith('mobile')) {
@@ -83,6 +90,11 @@ test('分类、继承私密表单、批量预览与导出删除', async ({ page,
   const call = await ownerApi(request);
   const suffix = 'e2e-' + randomUUID().slice(0, 8);
   const ids: string[] = [];
+  const iconRequests: string[] = [];
+  await page.context().route('**/api/v1/bookmarks/*/icon', route => {
+    iconRequests.push(new URL(route.request().url()).pathname.split('/').at(-2)!);
+    return route.fulfill({ status: 204 });
+  });
   let categoryId: string | undefined;
   try {
     const publicBook = await call('POST', '/bookmarks', { title: '公开 ' + suffix, url: 'https://example.com/' + suffix });
@@ -98,19 +110,31 @@ test('分类、继承私密表单、批量预览与导出删除', async ({ page,
     await page.locator('.page-ops').getByRole('button', { name: '添加书签', exact: true }).click();
     await page.getByLabel('书签名称').fill('私密 ' + suffix);
     await page.getByLabel('网站地址').fill('https://example.com/private/' + suffix);
+    const beforeUnsavedUrl = iconRequests.length;
+    await page.getByLabel('网站地址').fill('https://other.example.com/unsaved/' + suffix);
+    await expect(page.locator('.preview-inline img')).toHaveCount(0);
+    expect(iconRequests).toHaveLength(beforeUnsavedUrl);
+    await page.getByLabel('网站地址').fill('https://example.com/private/' + suffix);
     await page.getByLabel('所在分类').selectOption(categoryId!);
     await expect(page.getByRole('checkbox', { name: /设为私密书签/ })).toBeDisabled();
     await expect(page.getByRole('checkbox', { name: /设为私密书签/ })).toBeChecked();
     await page.getByRole('button', { name: '保存书签', exact: true }).click();
     await expect(page).toHaveURL(/\/bookmarks\/[a-f0-9-]+\/edit$/);
     const privateId = page.url().split('/').at(-2)!; ids.push(privateId);
+    await expect.poll(() => iconRequests.includes(privateId)).toBe(true);
+    const beforeSavedUrlChange = iconRequests.length;
+    await page.getByLabel('网站地址').fill('https://changed.example.com/saved/' + suffix);
+    await expect(page.locator('.preview-inline img')).toHaveCount(0);
+    expect(iconRequests).toHaveLength(beforeSavedUrlChange);
     await page.getByLabel('个人笔记').fill('继承状态保存验证');
     await page.getByRole('button', { name: '保存修改', exact: true }).click();
     await expect(page.getByRole('button', { name: '保存中…', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
     await expect(page.getByText('书签已保存', { exact: true }).last()).toBeVisible();
+    await expect.poll(() => iconRequests.length > beforeSavedUrlChange).toBe(true);
     const saved = await (await call('GET', '/bookmarks/' + privateId)).json();
     expect(saved.isPrivate).toBe(false); expect(saved.effectivePrivate).toBe(true);
+    expect(saved.url).toBe('https://changed.example.com/saved/' + suffix);
     await page.screenshot({ path: info.outputPath('owner-editor.png') });
     await page.goto('/bookmarks?keyword=' + suffix);
     await expect(page.locator('.bookmark-tile')).toHaveCount(2);

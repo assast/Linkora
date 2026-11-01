@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { AppProvider } from './state';
-import { defaults, type Bookmark, type Category } from './types';
+import { defaults, type Bookmark, type Category, type BookmarkIconConfig } from './types';
 
 const book: Bookmark = { id: 'book-1', title: '测试书签', url: 'https://example.test/one', description: '', notes: '',
   categoryId: null, categoryPath: '未分类', tags: [], isPrivate: false, effectivePrivate: false, inheritedPrivate: false,
@@ -15,6 +15,8 @@ let authenticated = false;
 let failPreferences = false;
 let categories: Category[] = [];
 let books = [book];
+let iconConfig: BookmarkIconConfig;
+let refreshJobState = 'completed';
 
 function renderApp(path = '/bookmarks') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -23,10 +25,29 @@ function renderApp(path = '/bookmarks') {
 
 beforeEach(() => {
   localStorage.clear(); authenticated = false; failPreferences = false; categories = []; books = [book];
+  iconConfig = { source: 'auto', version: null, dashboardId: null, uploaded: false }; refreshJobState = 'completed';
   vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname.replace('/api/v1', '');
     const page = Number(url.searchParams.get('page') || 1), pageSize = Number(url.searchParams.get('pageSize') || 50);
+    if (path === `/bookmarks/${book.id}`) return Response.json(book);
+    if (path === `/bookmarks/${book.id}/icon-config`) {
+      if (init?.method === 'PATCH') {
+        const body = JSON.parse(init.body as string);
+        iconConfig = { source: body.source, dashboardId: body.dashboardId || null, version: 'next-version', uploaded: false };
+      }
+      return Response.json(iconConfig);
+    }
+    if (path === `/bookmarks/${book.id}/icon-upload`) {
+      iconConfig = { source: 'upload', dashboardId: null, version: 'uploaded-version', uploaded: true };
+      return Response.json(iconConfig);
+    }
+    if (path === '/icon-library') {
+      const items = [{ id: 'github', name: 'GitHub' }, { id: 'github-light', name: 'GitHub Light' }];
+      return Response.json({ items, total: 2, page, pageSize: 24 });
+    }
+    if (path.startsWith('/icon-refresh-jobs')) return Response.json({ id: 'job-one', state: refreshJobState, total: 1, processed: 1, success: 1, failed: 0, skipped: 0,
+      totalOrigins: 1, processedOrigins: 1, page: 1, pageSize: 24, results: [{ id: book.id, title: book.title, status: 'success', reason: 'success' }] });
     const data = path === '/auth/me' ? (authenticated ? { authenticated: true, owner: { id: 'owner-1', email: 'owner@example.test' } } : { authenticated: false })
       : path === '/auth/logout' ? (authenticated = false, {})
       : path === '/categories/tree' ? categories : path === '/tags' ? []
@@ -37,6 +58,81 @@ beforeEach(() => {
   }));
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+describe('书签图标管理界面', () => {
+  it('未保存书签和未保存 URL 暂停人工配置，不为新书签请求配置', async () => {
+    authenticated = true;
+    const view = renderApp('/bookmarks/new');
+    await screen.findByText('保存书签后可选择或上传图标。');
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).includes('/icon-config'))).toBe(false);
+    view.unmount(); renderApp(`/bookmarks/${book.id}/edit`);
+    const input = await screen.findByLabelText('网站地址', { exact: false });
+    await screen.findByRole('button', { name: '从图标库选择' });
+    await userEvent.clear(input); await userEvent.type(input, 'https://other.test');
+    expect(screen.getByRole('button', { name: '从图标库选择' })).toBeDisabled();
+    expect(screen.getByLabelText('上传书签图标')).toBeDisabled();
+    expect(screen.getByText('先保存网站地址，再修改图标。')).toBeInTheDocument();
+  });
+
+  it('明确应用 Dashboard 图标并保留其他未保存输入', async () => {
+    authenticated = true; renderApp(`/bookmarks/${book.id}/edit`);
+    const title = await screen.findByLabelText('书签名称', { exact: false });
+    await userEvent.clear(title); await userEvent.type(title, '还未保存的名称');
+    await userEvent.click(await screen.findByRole('button', { name: '从图标库选择' }));
+    await userEvent.type(screen.getByLabelText('搜索图标库'), 'github');
+    await userEvent.click(await screen.findByRole('button', { name: '选择图标 github-light' }));
+    expect(vi.mocked(fetch).mock.calls.some(call => call[1]?.method === 'PATCH' && String(call[0]).endsWith('/icon-config'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: '应用图标' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(title).toHaveValue('还未保存的名称');
+    expect(screen.getByText('Dashboard Icons', { exact: true })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '恢复自动' }));
+    await screen.findByText('自动 Favicon', { exact: true });
+  });
+
+  it('上传先本地预览，明确应用时发送 FormData', async () => {
+    const BrowserURL = URL;
+    vi.stubGlobal('URL', class extends BrowserURL { static createObjectURL = vi.fn(() => 'blob:icon-preview'); static revokeObjectURL = vi.fn(); });
+    authenticated = true; renderApp(`/bookmarks/${book.id}/edit`);
+    const input = await screen.findByLabelText('上传书签图标');
+    await waitFor(() => expect(input).toBeEnabled());
+    await userEvent.upload(input, new File(['test-image'], 'icon.png', { type: 'image/png' }));
+    expect(screen.getByAltText('待应用的上传图标')).toHaveAttribute('src', 'blob:icon-preview');
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/icon-upload'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: '应用上传图标' }));
+    await screen.findByText('自定义上传', { exact: true });
+    const sent = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/icon-upload'))!;
+    expect(sent[1]?.body).toBeInstanceOf(FormData);
+    expect(sent[1]?.headers).not.toHaveProperty('Content-Type');
+  });
+
+  it('全库范围明确且导航后保留任务结果', async () => {
+    authenticated = true; renderApp('/bookmarks?keyword=test');
+    await userEvent.click(await screen.findByRole('button', { name: '刷新全库图标' }));
+    await screen.findByText('自动图标刷新已完成');
+    const request = vi.mocked(fetch).mock.calls.find(call => String(call[0]) === '/api/v1/icon-refresh-jobs')!;
+    expect(JSON.parse(request[1]!.body as string)).toEqual({ scope: 'all' });
+    await userEvent.click(screen.getByRole('button', { name: '导航首页' }));
+    expect(screen.getByText('自动图标刷新已完成')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '查看刷新结果' }));
+    await screen.findByRole('dialog', { name: '图标刷新结果' });
+    expect(await screen.findByText('已刷新', { exact: true })).toBeInTheDocument();
+  });
+
+  it('退出登录停止任务并忽略延迟返回的私密结果', async () => {
+    authenticated = true; refreshJobState = 'running';
+    const previous = vi.mocked(fetch).getMockImplementation()!;
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).includes('/icon-refresh-jobs/') ? new Promise(resolve => { finish = resolve; }) : previous(input, init));
+    renderApp(); await userEvent.click(await screen.findByRole('button', { name: '刷新全库图标' }));
+    await screen.findByText('正在刷新自动图标'); await waitFor(() => expect(finish).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: '已登录' }));
+    await userEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    finish(Response.json({ id: 'job-one', state: 'completed', results: [{ title: '不能泄漏的私密结果' }] }));
+    await waitFor(() => expect(screen.queryByLabelText('图标刷新进度')).not.toBeInTheDocument());
+    expect(screen.queryByText('不能泄漏的私密结果')).not.toBeInTheDocument();
+  });
+});
 
 describe('书签视图的浏览器记忆', () => {
   it('首次访问默认卡片，切换列表后刷新仍使用列表', async () => {

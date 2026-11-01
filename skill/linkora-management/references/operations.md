@@ -46,7 +46,7 @@ linkora_compose ps
 
 ## 备份与恢复
 
-完整备份使用 PG 原生 dump。以下在 NC 执行，从容器环境读取管理员身份，不填写明文密码：
+数据库备份使用 PG 原生 dump。启用自定义图标后，完整服务备份还必须保存独立上传卷，并在暂停本项目 API 写入期间将二者保存为同一备份集；具体步骤见 [部署备份说明](../../../docs/deployment.md#pg-原生备份与独立恢复演练)。以下仅展示数据库部分，从容器环境读取管理员身份，不填写明文密码：
 
 ```sh
 umask 077
@@ -62,6 +62,14 @@ docker exec ai-postgres sh -c 'createdb -U "$POSTGRES_USER" -O linkora_test link
 docker exec -i ai-postgres pg_restore -U linkora_test -d linkora_restore_test --no-owner --no-acl --single-transaction --exit-on-error < "$LINKORA_BACKUP_FILE"
 ```
 
-用同版本应用连接恢复库，绑定独立端口，核对分类引用、标签、所有者登录、显式/继承私密、列表与导出。备份含私密内容及会话数据，不能提交 Git 或随意发送给外部服务。
+用同版本应用连接恢复库和由同一备份集恢复的新上传卷，绑定独立端口，核对分类引用、标签、所有者登录、显式/继承私密、列表、导出、图标配置及实际上传图片。备份含私密内容及会话数据，不能提交 Git 或随意发送给外部服务。
+
+## 图标缓存与刷新
+
+- `ICON_CACHE_DIR`/`site_icons` 是可重建的自动和 Dashboard Icons 缓存；`ICON_UPLOAD_DIR`/`icon_uploads` 是用户数据。只清理前者，不能使用 `down -v` 重建缓存。
+- 图标配置按书签保存，编辑页支持选择图标库、上传及恢复自动。仅所有者可写，所有变更均需 CSRF；现有管理客户端的书签与 JSON 导出字段保持兼容。
+- 单条/选中和全库刷新走独立图标任务 API，不使用内容批量预览/提交。按 origin 去重、最多 4 个共享执行槽，跳过人工来源，失败保留旧图；全库包含私密书签并忽略当前筛选。
+- 刷新结果只对所有者开放，完成后保留 30 分钟，API 重启后可重发；自动刷新不改变内容修订，人工选择变更会使旧内容预览失效。
+- Dashboard 索引随应用离线交付，用 `node scripts/update-dashboard-icons.mjs <完整上游提交>` 显式更新；不在生产启动时同步。
 
 NC 的 PG 为共享服务：不停止/重建 `ai-postgres`，不执行 Prisma reset，不使用 `compose down -v`，不清理其他 stack 或数据库。测试与演练只使用专用测试/恢复库。

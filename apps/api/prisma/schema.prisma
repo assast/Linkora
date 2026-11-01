@@ -70,11 +70,31 @@ model Bookmark {
   owner         User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   category      Category? @relation(fields: [ownerId, categoryId], references: [ownerId, id], onDelete: Restrict, onUpdate: NoAction)
   tags          BookmarkTag[]
+  icon          BookmarkIcon?
 
   @@unique([ownerId, id])
   @@index([ownerId, categoryId, createdAt])
   @@index([ownerId, isFavorite])
   @@map("bookmarks")
+}
+
+enum IconSource {
+  AUTO
+  DASHBOARD
+  UPLOAD
+}
+
+model BookmarkIcon {
+  bookmarkId      String     @id @map("bookmark_id") @db.Uuid
+  source          IconSource
+  version         String     @db.Uuid
+  dashboardId     String?    @map("dashboard_id") @db.VarChar(120)
+  dashboardCommit String?    @map("dashboard_commit") @db.Char(40)
+  dashboardFormat String?    @map("dashboard_format") @db.VarChar(4)
+  uploadKey       String?    @map("upload_key") @db.Uuid
+  bookmark        Bookmark   @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+
+  @@map("bookmark_icons")
 }
 
 model Tag {

@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { api, resetRequests, StaleSessionError, type RequestOptions } from './api';
-import { defaults, flattenCategories, type Category, type Home, type Identity, type Impact, type Preferences } from './types';
+import { api, ApiError, resetRequests, StaleSessionError, type RequestOptions } from './api';
+import { defaults, flattenCategories, type Category, type Home, type Identity, type Impact, type Preferences, type IconRefreshJob } from './types';
+import { IconGeneration } from './icon-generation';
 
 export interface ConfirmOptions { title: string; description: string; impact?: Impact; label?: string; danger?: boolean }
 export type ActiveDialog = null | { kind: 'login' | 'account' | 'manager' } | { kind: 'category'; category?: Category; parentId?: string | null };
@@ -33,6 +34,37 @@ function useAppState() {
   const scope = identity.owner?.id || 'guest';
   const ready = identityQuery.isSuccess;
   const call = useCallback(<T,>(path: string, options: RequestOptions = {}) => api<T>(path, { ...options, csrf: identity.csrfToken }), [identity.csrfToken]);
+  const [iconGeneration, setIconGeneration] = useState(0);
+  const reloadIcons = useCallback(() => setIconGeneration(value => value + 1), []);
+  const [iconTask, setIconTask] = useState<{ scope: string; id: string } | null>(null);
+  const [startingIcons, setStartingIcons] = useState(false);
+  const iconJobId = identity.authenticated && iconTask?.scope === scope ? iconTask.id : null;
+  const iconJobQuery = useQuery({ queryKey: ['data', scope, 'icon-refresh', iconJobId], enabled: ready && !!iconJobId,
+    queryFn: ({ signal }) => call<IconRefreshJob>(`/icon-refresh-jobs/${iconJobId}`, { signal }), retry: false,
+    refetchInterval: query => query.state.data?.state === 'completed' || query.state.error ? false : 1500 });
+  const progress = useRef('');
+  useEffect(() => {
+    const job = iconJobQuery.data;
+    if (!job || !iconJobId) return;
+    const next = `${scope}:${job.id}:${job.processed}:${job.state}`;
+    if (progress.current !== next) { progress.current = next; reloadIcons(); }
+  }, [iconJobQuery.data, iconJobId, scope, reloadIcons]);
+  useEffect(() => {
+    if (iconJobQuery.error && !(iconJobQuery.error instanceof StaleSessionError)) {
+      toast.error(errorMessage(iconJobQuery.error)); setIconTask(null);
+    }
+  }, [iconJobQuery.error]);
+  const startIconRefresh = async (bookmarkIds?: string[]) => {
+    setStartingIcons(true);
+    try {
+      const job = await call<IconRefreshJob>('/icon-refresh-jobs', { method: 'POST', body: bookmarkIds ? { scope: 'selected', bookmarkIds } : { scope: 'all' } });
+      setIconTask({ scope, id: job.id });
+      client.setQueryData(['data', scope, 'icon-refresh', job.id], job);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409 && error.jobId) setIconTask({ scope, id: error.jobId });
+      else if (!(error instanceof StaleSessionError)) toast.error(errorMessage(error));
+    } finally { setStartingIcons(false); }
+  };
   const [dialog, setDialog] = useState<ActiveDialog>(null);
   const [confirmation, setConfirmation] = useState<ConfirmOptions | null>(null);
   const pendingConfirmation = useRef<((result: boolean) => void) | null>(null);
@@ -53,7 +85,7 @@ function useAppState() {
     void client.cancelQueries(filter); client.removeQueries(filter);
   }, [client]);
 
-  useEffect(() => { removeOldData(scope); closeAllDialogs(); }, [scope, removeOldData, closeAllDialogs]);
+  useEffect(() => { removeOldData(scope); closeAllDialogs(); setIconTask(null); }, [scope, removeOldData, closeAllDialogs]);
   const expire = useCallback(() => {
     resetRequests(); previousScope.current = 'guest';
     void client.cancelQueries();
@@ -114,7 +146,8 @@ function useAppState() {
       description: '此修改会让部分内容对访客可见，请核对影响范围。', impact, label: '确认修改并公开', danger: true })) return null;
     return call<T>(`/${resource}/${id}`, { method: 'PATCH', body: { ...(payload as object), expectedRevision: impact.revision, confirmedPublic: true } });
   };
-  return { identity, identityQuery, scope, ready, call, categoriesQuery, categories: categoriesQuery.data || [],
+  return { identity, identityQuery, scope, ready, call, iconGeneration, reloadIcons, iconJob: iconJobId ? iconJobQuery.data : undefined,
+    iconJobId, startingIcons, startIconRefresh, dismissIconJob: () => setIconTask(null), categoriesQuery, categories: categoriesQuery.data || [],
     flatCategories: flattenCategories(categoriesQuery.data || []), homeQuery, tagsQuery, preferences,
     updatePreferences, refresh, login, logout, dialog, confirmation, setDialog, closeDialog, confirm, openLogin, openCategory, openManager, addBookmark, saveWithPreview };
 }
@@ -122,5 +155,8 @@ function useAppState() {
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : '操作失败，请重试';
 type AppState = ReturnType<typeof useAppState>;
 const Context = createContext<AppState | null>(null);
-export function AppProvider({ children }: { children: ReactNode }) { return <Context.Provider value={useAppState()}>{children}</Context.Provider>; }
+export function AppProvider({ children }: { children: ReactNode }) {
+  const state = useAppState();
+  return <Context.Provider value={state}><IconGeneration.Provider value={state.iconGeneration}>{children}</IconGeneration.Provider></Context.Provider>;
+}
 export function useApp() { const value = useContext(Context); if (!value) throw new Error('缺少 AppProvider'); return value; }

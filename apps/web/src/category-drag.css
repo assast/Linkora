@@ -1,0 +1,15 @@
+/* Hallmark · v2.0.0 · shape: app screen · genre: modern-minimal · long-press category drag */
+/* critique: a visible grip makes the same-level drag target clear and touch operable. */
+.sidebar-sort-hint{margin:0 8px 8px;padding:8px;border-radius:8px;background:var(--sub);color:var(--muted);font-size:10px;line-height:1.5}
+.tree-drag-handle{display:grid;place-items:center;flex:0 0 28px;width:28px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--faint);cursor:grab;touch-action:none;user-select:none;transition:background-color var(--dur-micro) var(--ease-out),color var(--dur-micro) var(--ease-out)}
+.tree-drag-handle svg{width:15px;height:15px}
+.tree-drag-handle:hover,.tree-drag-handle:focus-visible,.tree-line.reorder-selected .tree-drag-handle{background:var(--wash);color:var(--primary)}
+.tree-drag-handle:focus-visible{outline:3px solid var(--primary);outline-offset:1px}
+.tree-drag-handle:active{cursor:grabbing}
+.tree-drag-handle:disabled{background:var(--sub);color:var(--muted);opacity:.55;cursor:not-allowed}
+.tree-line.reorder-selected{background:var(--wash);outline:1px dashed var(--primary);outline-offset:-1px}
+.tree-line.reorder-dragging{opacity:.55}
+.tree-line.drop-target-before{box-shadow:inset 0 2px 0 var(--primary)}
+.tree-line.drop-target-after{box-shadow:inset 0 -2px 0 var(--primary)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;white-space:nowrap;clip-path:inset(50%);border:0}
+@media(prefers-reduced-motion:reduce){.tree-drag-handle{transition:none}}

@@ -9,6 +9,11 @@ services:
       SESSION_DAYS: ${SESSION_DAYS:-7}
       LOGIN_LIMIT: ${LOGIN_LIMIT:-10}
       ALLOW_INSECURE_HTTP: ${ALLOW_INSECURE_HTTP:-false}
+      ICON_CACHE_DIR: ${ICON_CACHE_DIR:-/app/data/site-icons}
+      ICON_UPLOAD_DIR: ${ICON_UPLOAD_DIR:-/app/data/icon-uploads}
+    volumes:
+      - site_icons:${ICON_CACHE_DIR:-/app/data/site-icons}
+      - icon_uploads:${ICON_UPLOAD_DIR:-/app/data/icon-uploads}
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -39,3 +44,6 @@ networks:
         - subnet: 172.16.15.0/24
   proxy_network:
     external: true
+volumes:
+  site_icons:
+  icon_uploads:

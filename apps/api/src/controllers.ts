@@ -4,7 +4,7 @@ import { Catalog } from './catalog';
 import { ContentMutations } from './mutations';
 import { Database } from './database';
 import { Identity, Public, Viewer } from './auth';
-import { BatchDto, BookmarkDto, BookmarkPatchDto, BookmarkQueryDto, CategoryDto, CategoryPatchDto, PreferencesDto } from './dto';
+import { BatchDto, BookmarkDto, BookmarkPatchDto, BookmarkQueryDto, CategoryDto, CategoryPatchDto, CategoryReorderDto, PreferencesDto } from './dto';
 
 @Global()
 @Module({ providers: [Catalog, ContentMutations], exports: [Catalog, ContentMutations] })
@@ -19,6 +19,9 @@ class CategoriesController {
   @Post() create(@Identity() viewer: Viewer, @Body() dto: CategoryDto) { return this.mutations.createCategory(viewer.ownerId!, dto); }
   @Post(':id/preview') preview(@Identity() viewer: Viewer, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CategoryPatchDto) {
     return this.mutations.preview(viewer.ownerId!, { kind: 'category', id, data: dto });
+  }
+  @Post(':id/reorder') reorder(@Identity() viewer: Viewer, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CategoryReorderDto) {
+    return this.mutations.reorderCategory(viewer.ownerId!, id, dto);
   }
   @Patch(':id') update(@Identity() viewer: Viewer, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CategoryPatchDto) { return this.mutations.updateCategory(viewer.ownerId!, id, dto); }
   @Delete(':id') remove(@Identity() viewer: Viewer, @Param('id', ParseUUIDPipe) id: string) { return this.mutations.deleteCategory(viewer.ownerId!, id); }

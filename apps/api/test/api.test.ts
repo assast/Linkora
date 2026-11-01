@@ -1,7 +1,10 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -24,6 +27,7 @@ describe('真实 PostgreSQL API 业务边界', () => {
   let app: INestApplication;
   let db: Database;
   let fixture: Awaited<ReturnType<typeof seedFixtures>>;
+  let iconCacheDirectory: string;
   const api = () => request(app.getHttpServer());
   const ownerId = () => fixture.ownerId;
   const id = (name: string) => fixture.ids[name];
@@ -39,9 +43,13 @@ describe('真实 PostgreSQL API 业务边界', () => {
       .send({ ...body, expectedRevision: preview.body.revision, ...extra }).expect(status) };
   };
 
-  before(async () => { db = new Database(); await db.$connect(); app = await createApplication(false); await app.init(); });
+  before(async () => {
+    iconCacheDirectory = await mkdtemp(join(tmpdir(), 'linkora-api-icons-'));
+    process.env.ICON_CACHE_DIR = iconCacheDirectory;
+    db = new Database(); await db.$connect(); app = await createApplication(false); await app.init();
+  });
   beforeEach(async () => { fixture = await seedFixtures(db); });
-  after(async () => { await app?.close(); await db?.$disconnect(); });
+  after(async () => { await app?.close(); await db?.$disconnect(); await rm(iconCacheDirectory, { recursive: true, force: true }); });
 
   test('初始化不覆盖现有所有者，并由数据库保证唯一账号', async () => {
     await assert.rejects(initializeOwner(db, 'other@example.test', TEST_PASSWORD), /已存在/);
@@ -121,6 +129,53 @@ describe('真实 PostgreSQL API 业务边界', () => {
     const auth = await login();
     const response = await authorized(api().get(prefix + `/bookmarks/${id('inherited')}`), auth).expect(200);
     assert.equal(response.body.isPrivate, false); assert.equal(response.body.effectivePrivate, true);
+  });
+
+  test('图标接口复用文件缓存、遵循有效私密并返回图片或空结果', async () => {
+    const origin = 'https://github.com';
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const originHash = createHash('sha256').update(origin).digest('hex');
+    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    const cacheDirectory = join(iconCacheDirectory, originHash);
+    await mkdir(cacheDirectory, { recursive: true });
+    await writeFile(join(cacheDirectory, `${contentHash}.icon`), bytes);
+    await writeFile(join(cacheDirectory, 'metadata.json'), JSON.stringify({ version: 1, origin, checkedAt: Date.now(), nextCheckAt: Date.now() + 86_400_000, contentHash, mediaType: 'image/png' }));
+
+    const auth = await login();
+    const batchBody = { operation: 'SET_FAVORITE', bookmarkIds: [id('github')], payload: { value: false } };
+    const pendingPreview = await authorized(api().post(prefix + '/bookmarks/batch/preview'), auth).send(batchBody).expect(201);
+    const beforeBook = await db.bookmark.findUniqueOrThrow({ where: { id: id('github') } });
+    const beforeRevision = (await db.user.findFirstOrThrow()).contentRevision;
+    const icon = await api().get(prefix + `/bookmarks/${id('github')}/icon?url=http://127.0.0.1/private`).buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = [];
+      res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      res.on('end', () => done(null, Buffer.concat(chunks)));
+    }).expect(200);
+    assert.deepEqual(icon.body, bytes);
+    assert.equal(icon.headers['content-type'], 'image/png');
+    assert.match(icon.headers['cache-control'], /no-store/);
+    const docs = await api().get('/api/docs-json').expect(200);
+    const operation = Object.entries(docs.body.paths as Record<string, { get?: { responses: Record<string, { content?: Record<string, unknown> }>; parameters?: { name?: string }[] } }>)
+      .find(([path]) => path.endsWith('/bookmarks/{id}/icon'))?.[1].get;
+    assert.ok(operation);
+    assert.ok(operation.responses['200']?.content?.['image/png']);
+    assert.ok(operation.responses['204']); assert.equal(operation.responses['204']?.content, undefined);
+    assert.ok(operation.responses['404']); assert.equal(operation.responses['404']?.content, undefined);
+    assert.ok(!operation.parameters?.some(parameter => ['url', 'cacheKey', 'path'].includes(parameter.name || '')));
+
+    await api().get(prefix + `/bookmarks/${id('secret')}/icon`).expect(404).expect(response => assert.equal(response.text, ''));
+    await api().get(prefix + `/bookmarks/${id('inherited')}/icon`).expect(404);
+    await api().get(prefix + `/bookmarks/${randomUUID()}/icon`).expect(404);
+    await api().get(prefix + `/bookmarks/${id('unclassified')}/icon`).expect(204).expect(response => assert.equal(response.text, ''));
+    await authorized(api().get(prefix + `/bookmarks/${id('inherited')}/icon`), auth).expect(204);
+
+    const afterBook = await db.bookmark.findUniqueOrThrow({ where: { id: id('github') } });
+    assert.equal(afterBook.updatedAt.getTime(), beforeBook.updatedAt.getTime());
+    assert.equal(afterBook.visitCount, beforeBook.visitCount);
+    assert.equal((await db.user.findFirstOrThrow()).contentRevision, beforeRevision);
+    await authorized(api().post(prefix + '/bookmarks/batch'), auth).send({ ...batchBody, expectedRevision: pendingPreview.body.revision }).expect(201);
+    const exported = await (await batch(auth, 'EXPORT', [id('github')])).expect(201);
+    assert.ok(!JSON.stringify(exported.body).includes('icon'));
   });
 
   test('四级分类筛选含后代、根级重名被拒绝', async () => {

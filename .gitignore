@@ -15,7 +15,10 @@ data/
 backups/
 *.dump
 .cache/
+.data/
 .code-review-graph/
 .codex/
+/.hallmark/
 .idea/
+/openspec/
 *.tsbuildinfo

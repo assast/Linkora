@@ -13,7 +13,7 @@
     "lint": "eslint apps scripts tests",
     "test": "pnpm -r --workspace-concurrency=1 test",
     "test:e2e": "playwright test",
-    "test:delivery": "node --test tests/delivery.test.mjs",
+    "test:delivery": "node --test tests/delivery.test.mjs tests/migrations.test.mjs tests/sql-docs.test.mjs",
     "test:skill": "python3 -B -m unittest discover -s tests -p test_linkora_skill.py",
     "test:benchmark": "node scripts/benchmark.mjs",
     "db:generate": "pnpm --filter @linkora/api db:generate",

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const watching = !process.argv.includes('--no-watch');
+const webPort = process.env.WEB_PORT || '5173';
 const build = spawnSync(process.execPath, [join(root, 'apps/api/node_modules/typescript/bin/tsc'), '-p', join(root, 'apps/api/tsconfig.json')], { stdio: 'inherit' });
 if (build.status !== 0) process.exit(build.status || 1);
 if (!watching) {
@@ -13,7 +14,7 @@ if (!watching) {
 const children = [
   ...(watching ? [spawn(process.execPath, [join(root, 'apps/api/node_modules/typescript/bin/tsc'), '-p', join(root, 'apps/api/tsconfig.json'), '--watch', '--preserveWatchOutput', '--watchFile', 'useFsEventsOnParentDirectory'], { cwd: root, env: process.env, stdio: 'inherit' })] : []),
   spawn(process.execPath, [...(watching ? ['--watch-path', join(root, 'apps/api/dist')] : []), join(root, 'apps/api/dist/main.js')], { cwd: root, env: process.env, stdio: 'inherit' }),
-  spawn(process.execPath, [join(root, 'apps/web/node_modules/vite/bin/vite.js'), ...(watching ? [] : ['preview']), '--host', '127.0.0.1', '--port', '5173', '--strictPort'], { cwd: join(root, 'apps/web'), env: process.env, stdio: 'inherit' }),
+  spawn(process.execPath, [join(root, 'apps/web/node_modules/vite/bin/vite.js'), ...(watching ? [] : ['preview']), '--host', '127.0.0.1', '--port', webPort, '--strictPort'], { cwd: join(root, 'apps/web'), env: process.env, stdio: 'inherit' }),
 ];
 let stopping = false;
 function stop(code = 0) {

@@ -3,6 +3,18 @@ import { api, ApiError, resetRequests, StaleSessionError } from './api';
 
 afterEach(() => { vi.unstubAllGlobals(); resetRequests(); });
 describe('身份边界与错误反馈', () => {
+  it('FormData 交给浏览器生成 boundary，并保留 CSRF 和身份检查', async () => {
+    const body = new FormData(); body.append('expectedVersion', 'null'); body.append('file', new Blob(['png'], { type: 'image/png' }), 'icon.png');
+    let finish!: (value: unknown) => void;
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: () => new Promise(resolve => { finish = resolve; }) });
+    vi.stubGlobal('fetch', fetch);
+    const pending = api('/bookmarks/id/icon-upload', { method: 'POST', body, csrf: 'token' });
+    await Promise.resolve();
+    expect(fetch.mock.calls[0][1].body).toBe(body);
+    expect(fetch.mock.calls[0][1].headers).toEqual({ 'X-CSRF-Token': 'token' });
+    resetRequests(); finish({ source: 'upload' });
+    await expect(pending).rejects.toBeInstanceOf(StaleSessionError);
+  });
   it('退出后拒绝延迟返回的私密响应', async () => {
     let resolve!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => new Promise(done => { resolve = done; }) }));

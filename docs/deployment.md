@@ -19,15 +19,35 @@
 5. 用 `deploy/init-owner.sh` 初始化唯一所有者；已有账号时命令拒绝覆盖。正式账号和数据不加载测试夹具。
 6. 以访客和所有者分别验证首页、列表、搜索、分类统计、私密直达请求和批量操作，再核对镜像源码提交标签。
 
+API 镜像为运行用户 `node` 创建两个独立可写目录：`ICON_CACHE_DIR=/app/data/site-icons` 对应 `site_icons` 缓存卷，`ICON_UPLOAD_DIR=/app/data/icon-uploads` 对应 `icon_uploads` 用户上传卷。目录不可相同或嵌套，均不作为静态资源公开。自动抓取的 PNG/JPEG/WebP/ICO 成功缓存 30 天，失败或禁止结果冷却 24 小时；Dashboard PNG/WebP 依据固定上游提交按需缓存。
+
+上传入口接受最多 2 MiB 的静态 PNG/JPEG/WebP，最大边 4096 像素，服务端归一化为最长边 256 像素的 WebP。Nginx 允许 3 MiB 完整请求以容纳 multipart 开销，API 独立限制文件大小。镜像内需交付固定图标库索引和 sharp 原生依赖；目标平台必须实际运行一次图片解码验证。
+
+如需重建这份可丢弃的缓存，先停止并移除 API 容器，再删除该卷，然后重新启动 API。已保存书签会在后续展示时按需重建图标：
+
+```sh
+docker compose --env-file deploy/.env -f deploy/compose.yaml stop api
+docker compose --env-file deploy/.env -f deploy/compose.yaml rm -f api
+docker volume rm linkora_site_icons
+docker compose --env-file deploy/.env -f deploy/compose.yaml up -d api
+```
+
+如果 Compose 项目名称改变，先检查 `docker compose ... config --volumes`，再删除对应项目的 `site_icons` 卷。这里只能删除可重建缓存，必须保留 `icon_uploads`。本版新增 `bookmark_icons` 表和来源约束迁移，旧书签无需回填、默认自动。回退时使用上一版配对 Web/API，保留新增表与上传卷；旧版本暂时只显示自动图标，重新升级后恢复人工选择。
+
+图标刷新任务只作用于自动来源，按 origin 共享结果、限制并发，失败保留旧图。全库范围包含私密书签且不受当前页面筛选限制。任务不跨 API 重启续跑，进度丢失时重新发起；已完成的缓存仍在。Dashboard 索引随应用交付，更新命令为 `node scripts/update-dashboard-icons.mjs <40 位上游提交>`；已有人工选择保留原提交。
+
 ## PG 原生备份与独立恢复演练
 
-以下命令在 NC 终端执行。文件权限通过 `umask` 限制，数据库管理员身份从现有容器环境读取，不在命令中填写密码。
+以下命令在 NC 终端执行。完整备份必须将 PG dump 和上传卷归入同一备份集，并在暂停本项目 API 写入期间取得；缓存卷无需备份。文件权限通过 `umask` 限制，数据库管理员身份从现有容器环境读取，不在命令中填写密码。
 
 ```sh
 umask 077
 mkdir -p /root/linkora-backups
 LINKORA_BACKUP_FILE="/root/linkora-backups/linkora-$(date -u +%Y%m%dT%H%M%SZ).dump"
+docker compose --env-file deploy/.env -f deploy/compose.yaml stop api
 docker exec ai-postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d linkora -Fc' > "$LINKORA_BACKUP_FILE"
+docker compose --env-file deploy/.env -f deploy/compose.yaml run --rm --no-deps --entrypoint sh api -c 'tar -czf - -C "$ICON_UPLOAD_DIR" .' > "${LINKORA_BACKUP_FILE%.dump}.uploads.tar.gz"
+docker compose --env-file deploy/.env -f deploy/compose.yaml start api
 ```
 
 恢复演练使用新的空测试库。将 `LINKORA_BACKUP_FILE` 设为需要恢复的备份路径；若示例库名已存在，先选择另一个独立测试库名，不覆盖现有库：
@@ -38,7 +58,9 @@ docker exec -i ai-postgres pg_restore -U linkora_test -d linkora_restore_test --
 docker exec ai-postgres psql -U linkora_test -d linkora_restore_test -c 'SELECT count(*) AS bookmarks FROM bookmarks; SELECT count(*) AS categories FROM categories; SELECT count(*) AS tags FROM tags;'
 ```
 
-用同版本应用镜像连接恢复库，并以未占用的独立端口运行验证实例。检查所有者登录、分类层级、标签关联、显式/继承私密、列表/统计及导出。不能只按行数相等判断恢复成功。
+同时将对应的 `.uploads.tar.gz` 恢复到新的专用上传卷，保持运行用户 `node` 可读写；不要覆盖正在使用的上传卷。用同版本应用镜像连接恢复库及新上传卷，并以未占用的独立端口运行验证实例。检查所有者登录、分类层级、标签关联、显式/继承私密、列表/统计、导出、图标配置及实际上传图片。不能只按行数相等判断恢复成功。
+
+恢复上传卷可用目标 API 镜像中的 tar，将归档只读挂载到临时容器、将新空上传卷挂载到 `/restore`，解包后将该目录归属设为 `node:node`。记录配对镜像版本、备份时间和两个备份文件的校验和。PG 与上传文件必须来自同一备份集；仅有 PG dump 或 JSON 导出无法完整恢复自定义图片。
 
 ## 应用回退与数据库回退
 

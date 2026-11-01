@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { Category } from '@prisma/client';
 import { Database, Transaction } from './database';
 import { Catalog } from './catalog';
-import { BatchDto, BookmarkDto, BookmarkPatchDto, CategoryDto, CategoryPatchDto, ConfirmationDto, normalizeTags } from './dto';
+import { IconUploads, type UploadReference } from './icon-uploads';
+import { BatchDto, BookmarkDto, BookmarkPatchDto, CategoryDto, CategoryPatchDto, CategoryReorderDto, ConfirmationDto, normalizeTags } from './dto';
 
 type BookState = { id: string; title: string; categoryId: string | null; isPrivate: boolean };
 type Change = { kind: 'category'; id: string; data: CategoryPatchDto }
@@ -57,7 +58,7 @@ export interface Impact {
 
 @Injectable()
 export class ContentMutations {
-  constructor(private readonly db: Database, private readonly catalog: Catalog) {}
+  constructor(private readonly db: Database, private readonly catalog: Catalog, private readonly uploads: IconUploads) {}
 
   private async impact(tx: Transaction, ownerId: string, revision: number, change: Change): Promise<Impact> {
     const categories = await tx.category.findMany({ where: { ownerId } });
@@ -139,14 +140,43 @@ export class ContentMutations {
   createCategory(ownerId: string, dto: CategoryDto) {
     return this.db.write(ownerId, async tx => {
       if (dto.parentId && !await tx.category.findUnique({ where: { ownerId_id: { ownerId, id: dto.parentId } } })) throw new NotFoundException('父分类不存在');
-      return tx.category.create({ data: { ownerId, ...defined(dto, CATEGORY_FIELDS) } });
+      const { _max } = await tx.category.aggregate({ where: { ownerId, parentId: dto.parentId ?? null }, _max: { sortOrder: true } });
+      return tx.category.create({ data: { ownerId, ...defined(dto, CATEGORY_FIELDS), sortOrder: dto.sortOrder ?? (_max.sortOrder ?? -1) + 1 } });
+    });
+  }
+
+  reorderCategory(ownerId: string, id: string, dto: CategoryReorderDto) {
+    return this.db.write(ownerId, async tx => {
+      if (id === dto.targetId) throw new BadRequestException('目标分组与当前分组相同');
+      const [category, target] = await Promise.all([
+        tx.category.findUnique({ where: { ownerId_id: { ownerId, id } } }),
+        tx.category.findUnique({ where: { ownerId_id: { ownerId, id: dto.targetId } } }),
+      ]);
+      if (!category || !target) throw new NotFoundException('分类不存在');
+      if (category.parentId !== target.parentId) throw new BadRequestException('只能调整同级分组的顺序');
+      const siblings = await tx.category.findMany({ where: { ownerId, parentId: category.parentId }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }] });
+      const next = [...siblings];
+      const [moving] = next.splice(next.findIndex(item => item.id === id), 1);
+      const targetIndex = next.findIndex(item => item.id === dto.targetId);
+      next.splice(targetIndex + (dto.position === 'after' ? 1 : 0), 0, moving);
+      for (const [sortOrder, sibling] of next.entries()) {
+        if (sibling.sortOrder !== sortOrder) await tx.category.update({ where: { ownerId_id: { ownerId, id: sibling.id } }, data: { sortOrder } });
+      }
+      return { moved: true };
     });
   }
 
   updateCategory(ownerId: string, id: string, dto: CategoryPatchDto) {
     return this.db.write(ownerId, async (tx, revision) => {
+      const category = await tx.category.findUnique({ where: { ownerId_id: { ownerId, id } } });
+      if (!category) throw new NotFoundException('分类不存在');
       this.confirm(await this.impact(tx, ownerId, revision, { kind: 'category', id, data: dto }), dto);
-      return tx.category.update({ where: { ownerId_id: { ownerId, id } }, data: defined(dto, CATEGORY_FIELDS) });
+      const data = defined(dto, CATEGORY_FIELDS);
+      if (dto.parentId !== undefined && dto.parentId !== category.parentId && dto.sortOrder === undefined) {
+        const { _max } = await tx.category.aggregate({ where: { ownerId, parentId: dto.parentId }, _max: { sortOrder: true } });
+        data.sortOrder = (_max.sortOrder ?? -1) + 1;
+      }
+      return tx.category.update({ where: { ownerId_id: { ownerId, id } }, data });
     });
   }
 
@@ -192,16 +222,21 @@ export class ContentMutations {
     });
   }
 
-  deleteBookmark(ownerId: string, id: string) {
-    return this.db.write(ownerId, async tx => {
+  async deleteBookmark(ownerId: string, id: string) {
+    const resources: UploadReference[] = [];
+    const result = await this.db.write(ownerId, async tx => {
+      resources.push(...await tx.bookmarkIcon.findMany({ where: { bookmarkId: id, source: 'UPLOAD' }, select: { bookmarkId: true, uploadKey: true } }));
       await tx.bookmark.delete({ where: { ownerId_id: { ownerId, id } } });
       return { deleted: true };
     });
+    await this.uploads.removeMany(resources);
+    return result;
   }
 
-  applyBatch(ownerId: string, dto: BatchDto) {
+  async applyBatch(ownerId: string, dto: BatchDto) {
     if (dto.operation === 'EXPORT') throw new BadRequestException('请使用导出接口');
-    return this.db.write(ownerId, async (tx, revision) => {
+    const resources: UploadReference[] = [];
+    const result = await this.db.write(ownerId, async (tx, revision) => {
       const impact = await this.impact(tx, ownerId, revision, { kind: 'batch', data: dto });
       this.confirm(impact, dto, true);
       const where = { ownerId, id: { in: dto.bookmarkIds } };
@@ -212,10 +247,13 @@ export class ContentMutations {
         case 'ADD_TAGS': case 'REMOVE_TAGS': case 'REPLACE_TAGS': await this.setTags(tx, ownerId, dto.bookmarkIds, dto.payload.tags!, dto.operation); break;
         case 'DELETE':
           if (!dto.confirmedDelete) throw new BadRequestException('请确认永久删除');
+          resources.push(...await tx.bookmarkIcon.findMany({ where: { bookmarkId: { in: dto.bookmarkIds }, source: 'UPLOAD' }, select: { bookmarkId: true, uploadKey: true } }));
           await tx.bookmark.deleteMany({ where }); break;
       }
       return { count: dto.bookmarkIds.length, revision: revision + 1 };
     });
+    await this.uploads.removeMany(resources);
+    return result;
   }
 
   export(ownerId: string, dto: BatchDto) {

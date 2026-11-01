@@ -36,12 +36,15 @@ export function configureHttp(app: INestApplication) {
     for (const method of ['get', 'post', 'patch', 'delete'] as const) {
       const operation = item[method];
       if (!operation) continue;
-      for (const status of [400, 401, 403, 404, 409, 429, 500]) operation.responses[status] = {
+      for (const status of [400, 401, 403, 404, 409, 429, 500]) {
+        if (operation.responses[status]) continue;
+        operation.responses[status] = {
         description: '请求校验、访问控制或服务错误；409 时需重新预览确认',
         content: { 'application/json': { schema: { type: 'object', properties: {
           statusCode: { type: 'integer' }, message: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] }, code: { type: 'string' },
         } } } },
-      };
+        };
+      }
       if (method !== 'get' && !path.endsWith('/auth/login')) {
         operation.parameters = [...operation.parameters || [], { in: 'header', name: 'X-CSRF-Token', required: true, description: '登录或身份检查响应中的 csrfToken', schema: { type: 'string' } }];
       }
