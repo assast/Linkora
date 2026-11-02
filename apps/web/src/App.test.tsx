@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -119,6 +119,41 @@ describe('书签图标管理界面', () => {
     expect(screen.getByText('Iconify', { exact: true })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '从图标库选择' }));
     expect(screen.getByRole('combobox', { name: '图标来源' })).toHaveValue('iconify');
+    expect(within(screen.getByRole('dialog')).getByText('mdi:github', { exact: true })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '关闭弹窗' }));
+    await userEvent.click(screen.getByRole('button', { name: '恢复自动' }));
+    await screen.findByText('自动 Favicon', { exact: true });
+    expect(iconConfig.iconifyId).toBeNull();
+  });
+
+  it('切换来源重置分页，迟到的 Iconify 搜索结果不污染 Dashboard 列表', async () => {
+    const previous = vi.mocked(fetch).getMockImplementation()!;
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (url.pathname === '/api/v1/icon-library') {
+        if (url.searchParams.get('source') === 'iconify') return new Promise(resolve => { finish = resolve; });
+        return Promise.resolve(Response.json({ items: [{ id: 'github-light', name: 'GitHub Light' }], total: 48, page: Number(url.searchParams.get('page')), pageSize: 24 }));
+      }
+      return previous(input, init);
+    });
+    authenticated = true; renderApp(`/bookmarks/${book.id}/edit`);
+    await userEvent.click(await screen.findByRole('button', { name: '从图标库选择' }));
+    await userEvent.click(await screen.findByRole('button', { name: '下一页' }));
+    await screen.findByText('2 / 2');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '图标来源' }), 'iconify');
+    expect(screen.getByText('输入关键词，搜索 Iconify 图标。')).toBeInTheDocument();
+    expect(finish).toBeUndefined();
+    await userEvent.type(screen.getByLabelText('搜索图标库'), 'github');
+    await waitFor(() => expect(finish).toBeDefined());
+    const sent = vi.mocked(fetch).mock.calls.find(call => String(call[0]).includes('source=iconify'))!;
+    expect(new URL(String(sent[0]), 'http://localhost').searchParams.get('page')).toBe('1');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '图标来源' }), 'dashboard');
+    finish(Response.json({ items: [{ id: 'mdi:github', name: 'github' }], total: 1, page: 1, pageSize: 24 }));
+    await screen.findByRole('button', { name: '选择图标 github-light' });
+    expect(screen.queryByRole('button', { name: '选择图标 mdi:github' })).not.toBeInTheDocument();
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '应用图标' })).toBeDisabled();
   });
 
   it('上传先本地预览，明确应用时发送 FormData', async () => {
