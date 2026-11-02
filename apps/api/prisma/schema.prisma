@@ -83,6 +83,7 @@ enum IconSource {
   AUTO
   DASHBOARD
   UPLOAD
+  ICONIFY
 }
 
 model BookmarkIcon {
@@ -92,6 +93,7 @@ model BookmarkIcon {
   dashboardId     String?    @map("dashboard_id") @db.VarChar(120)
   dashboardCommit String?    @map("dashboard_commit") @db.Char(40)
   dashboardFormat String?    @map("dashboard_format") @db.VarChar(4)
+  iconifyId       String?    @map("iconify_id") @db.VarChar(160)
   uploadKey       String?    @map("upload_key") @db.Uuid
   bookmark        Bookmark   @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
 

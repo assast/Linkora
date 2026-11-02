@@ -1,5 +1,5 @@
 -- Linkora 全量初始化 SQL（PostgreSQL 16+）
--- 最新迁移：202611020001_secondary_url
+-- 最新迁移：202611020002_iconify_source
 -- 仅用于空数据库；包含当前全部业务表、枚举、索引及约束。
 -- 不插入账号或演示数据；Prisma 迁移登记步骤见本目录 README.md。
 
@@ -158,7 +158,7 @@ ALTER TABLE "categories" ADD CONSTRAINT "categories_not_self_parent" CHECK ("par
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_visit_count_nonnegative" CHECK ("visit_count" >= 0);
 
 -- 书签人工图标配置
-CREATE TYPE "IconSource" AS ENUM ('AUTO', 'DASHBOARD', 'UPLOAD');
+CREATE TYPE "IconSource" AS ENUM ('AUTO', 'DASHBOARD', 'UPLOAD', 'ICONIFY');
 
 CREATE TABLE bookmark_icons (
   bookmark_id UUID PRIMARY KEY REFERENCES bookmarks(id) ON DELETE CASCADE,
@@ -167,13 +167,16 @@ CREATE TABLE bookmark_icons (
   dashboard_id VARCHAR(120),
   dashboard_commit CHAR(40),
   dashboard_format VARCHAR(4),
+  iconify_id VARCHAR(160),
   upload_key UUID,
   CONSTRAINT bookmark_icon_source_fields CHECK (
-    (source = 'AUTO' AND dashboard_id IS NULL AND dashboard_commit IS NULL AND dashboard_format IS NULL AND upload_key IS NULL)
+    (source = 'AUTO' AND dashboard_id IS NULL AND dashboard_commit IS NULL AND dashboard_format IS NULL AND upload_key IS NULL AND iconify_id IS NULL)
     OR (source = 'DASHBOARD' AND dashboard_id IS NOT NULL AND dashboard_id ~ '^[a-z0-9][a-z0-9-]{0,119}$'
       AND dashboard_commit IS NOT NULL AND dashboard_commit ~ '^[a-f0-9]{40}$'
-      AND dashboard_format IS NOT NULL AND dashboard_format IN ('png', 'webp') AND upload_key IS NULL)
-    OR (source = 'UPLOAD' AND upload_key IS NOT NULL AND dashboard_id IS NULL AND dashboard_commit IS NULL AND dashboard_format IS NULL)
+      AND dashboard_format IS NOT NULL AND dashboard_format IN ('png', 'webp') AND upload_key IS NULL AND iconify_id IS NULL)
+    OR (source = 'UPLOAD' AND upload_key IS NOT NULL AND dashboard_id IS NULL AND dashboard_commit IS NULL AND dashboard_format IS NULL AND iconify_id IS NULL)
+    OR (source::text = 'ICONIFY' AND iconify_id IS NOT NULL AND iconify_id ~ '^[a-z0-9]+(-[a-z0-9]+)*:[a-z0-9]+(-[a-z0-9]+)*$'
+      AND dashboard_id IS NULL AND dashboard_commit IS NULL AND dashboard_format IS NULL AND upload_key IS NULL)
   )
 );
 

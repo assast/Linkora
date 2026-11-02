@@ -25,7 +25,7 @@ function renderApp(path = '/bookmarks') {
 
 beforeEach(() => {
   localStorage.clear(); authenticated = false; failPreferences = false; categories = []; books = [book];
-  iconConfig = { source: 'auto', version: null, dashboardId: null, uploaded: false }; refreshJobState = 'completed';
+  iconConfig = { source: 'auto', version: null, dashboardId: null, iconifyId: null, uploaded: false }; refreshJobState = 'completed';
   vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname.replace('/api/v1', '');
@@ -43,16 +43,18 @@ beforeEach(() => {
     if (path === `/bookmarks/${book.id}/icon-config`) {
       if (init?.method === 'PATCH') {
         const body = JSON.parse(init.body as string);
-        iconConfig = { source: body.source, dashboardId: body.dashboardId || null, version: 'next-version', uploaded: false };
+        iconConfig = { source: body.source, dashboardId: body.dashboardId || null, iconifyId: body.iconifyId || null, version: 'next-version', uploaded: false };
       }
       return Response.json(iconConfig);
     }
     if (path === `/bookmarks/${book.id}/icon-upload`) {
-      iconConfig = { source: 'upload', dashboardId: null, version: 'uploaded-version', uploaded: true };
+      iconConfig = { source: 'upload', dashboardId: null, iconifyId: null, version: 'uploaded-version', uploaded: true };
       return Response.json(iconConfig);
     }
     if (path === '/icon-library') {
-      const items = [{ id: 'github', name: 'GitHub' }, { id: 'github-light', name: 'GitHub Light' }];
+      const items = url.searchParams.get('source') === 'iconify'
+        ? [{ id: 'mdi:github', name: 'github' }]
+        : [{ id: 'github', name: 'GitHub' }, { id: 'github-light', name: 'GitHub Light' }];
       return Response.json({ items, total: 2, page, pageSize: 24 });
     }
     if (path.startsWith('/icon-refresh-jobs')) return Response.json({ id: 'job-one', state: refreshJobState, total: 1, processed: 1, success: 1, failed: 0, skipped: 0,
@@ -97,6 +99,26 @@ describe('书签图标管理界面', () => {
     expect(screen.getByText('Dashboard Icons', { exact: true })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '恢复自动' }));
     await screen.findByText('自动 Favicon', { exact: true });
+  });
+
+  it('切换图标来源会清除旧选择，Iconify 通过同源接口预览和应用', async () => {
+    authenticated = true; renderApp(`/bookmarks/${book.id}/edit`);
+    await userEvent.click(await screen.findByRole('button', { name: '从图标库选择' }));
+    await userEvent.click(await screen.findByRole('button', { name: '选择图标 github-light' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '图标来源' }), 'iconify');
+    expect(screen.getByRole('button', { name: '应用图标' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '选择图标 github-light' })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('搜索图标库'), 'github');
+    const option = await screen.findByRole('button', { name: '选择图标 mdi:github' });
+    expect(option.querySelector('img')).toHaveAttribute('src', '/api/v1/icon-library/mdi%3Agithub/preview?source=iconify');
+    await userEvent.click(option);
+    await userEvent.click(screen.getByRole('button', { name: '应用图标' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const sent = vi.mocked(fetch).mock.calls.find(call => call[1]?.method === 'PATCH' && String(call[0]).endsWith('/icon-config'))!;
+    expect(JSON.parse(sent[1]!.body as string)).toEqual({ source: 'iconify', iconifyId: 'mdi:github', expectedVersion: null });
+    expect(screen.getByText('Iconify', { exact: true })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '从图标库选择' }));
+    expect(screen.getByRole('combobox', { name: '图标来源' })).toHaveValue('iconify');
   });
 
   it('上传先本地预览，明确应用时发送 FormData', async () => {

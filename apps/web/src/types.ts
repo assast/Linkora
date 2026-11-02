@@ -9,7 +9,8 @@ export interface Bookmark {
   isFavorite: boolean; visitCount: number; createdAt: string; updatedAt: string;
 }
 export interface Page { items: Bookmark[]; total: number; page: number; pageSize: number }
-export interface BookmarkIconConfig { source: 'auto' | 'dashboard' | 'upload'; version: string | null; dashboardId: string | null; uploaded: boolean }
+export type IconLibrarySource = 'dashboard' | 'iconify';
+export interface BookmarkIconConfig { source: 'auto' | IconLibrarySource | 'upload'; version: string | null; dashboardId: string | null; iconifyId: string | null; uploaded: boolean }
 export interface IconLibraryPage { items: { id: string; name: string }[]; total: number; page: number; pageSize: number }
 export interface IconRefreshJob {
   id: string; state: 'queued' | 'running' | 'completed'; total: number; processed: number; success: number; failed: number; skipped: number;

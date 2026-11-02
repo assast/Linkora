@@ -130,4 +130,4 @@ input[type=checkbox] { accent-color:var(--primary); }
   .with-selection .table-header>.bookmark-category,.with-selection .bookmark-row>.bookmark-category,.with-selection .table-header>.bookmark-tags,.with-selection .bookmark-row>.bookmark-tags,.with-selection .table-header>.bookmark-date,.with-selection .bookmark-row>.bookmark-date { display:none; }
 }
 
-.fav-ico{position:relative;overflow:hidden}.fav-ico img{position:absolute;inset:0;width:100%;height:100%;padding:5px;object-fit:contain}
+.fav-ico{position:relative;overflow:hidden}.fav-ico.image-loaded{background:transparent}.fav-ico img{position:absolute;inset:0;width:100%;height:100%;padding:5px;object-fit:contain}

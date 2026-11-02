@@ -11,6 +11,7 @@ import { createApplication } from '../src/app';
 import { Database } from '../src/database';
 import { SiteIconService } from '../src/site-icons';
 import { DashboardIcons } from '../src/dashboard-icons';
+import { IconifyIcons } from '../src/iconify-icons';
 import { IconUploads } from '../src/icon-uploads';
 import { BookmarkIcons } from '../src/bookmark-icons';
 import { seedFixtures, TEST_EMAIL, TEST_PASSWORD } from './fixtures';
@@ -22,7 +23,7 @@ process.env.SITE_URL = 'http://127.0.0.1:5173';
 process.env.LOGIN_LIMIT = '1000';
 const origin = process.env.SITE_URL, prefix = '/api/v1';
 interface Auth { cookie: string; csrf: string }
-interface Config { source: string; version: string | null; dashboardId: string | null }
+interface Config { source: string; version: string | null; dashboardId: string | null; iconifyId: string | null }
 interface Job { id: string; state: string; total: number; processed: number; success: number; failed: number; skipped: number; totalOrigins: number; processedOrigins: number; results: { id: string; reason: string }[] }
 
 describe('图标管理真实 PostgreSQL 集成', () => {
@@ -34,6 +35,10 @@ describe('图标管理真实 PostgreSQL 集成', () => {
       if (delay) await new Promise(resolve => setTimeout(resolve, delay));
       if (barrier && url.hostname === 'github.com' && url.pathname === '/') await barrier();
       if (fail || url.pathname === '/') return null;
+      if (url.hostname === 'api.iconify.design') return { status: 200, finalUrl: url.href,
+        body: url.pathname === '/search' ? Buffer.from(JSON.stringify({ icons: ['mdi:github', 'simple-icons:github'] }))
+          : Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M2 2h20v20H2z"/></svg>'),
+        headers: { 'content-type': url.pathname === '/search' ? 'application/json' : 'image/svg+xml' } };
       const library = url.hostname === 'cdn.jsdelivr.net';
       return { status: 200, body: library ? webp : png, headers: { 'content-type': library ? 'image/webp' : 'image/png' }, finalUrl: url.href };
     } finally { active--; }
@@ -44,8 +49,8 @@ describe('图标管理真实 PostgreSQL 集成', () => {
   const config = async (key = 'github'): Promise<Config> => (await signed(api().get(`${prefix}/bookmarks/${id(key)}/icon-config`)).expect(200)).body;
   const upload = (key: string, version: string | null, bytes = png, type = 'image/png') => signed(api().post(`${prefix}/bookmarks/${id(key)}/icon-upload`))
     .field('expectedVersion', version || 'null').attach('file', bytes, { filename: '../../logo.png', contentType: type });
-  const choose = (key: string, current: Config, source: 'auto' | 'dashboard') => signed(api().patch(`${prefix}/bookmarks/${id(key)}/icon-config`))
-    .send({ source, expectedVersion: current.version, ...(source === 'dashboard' ? { dashboardId: 'github' } : {}) });
+  const choose = (key: string, current: Config, source: 'auto' | 'dashboard' | 'iconify') => signed(api().patch(`${prefix}/bookmarks/${id(key)}/icon-config`))
+    .send({ source, expectedVersion: current.version, ...(source === 'dashboard' ? { dashboardId: 'github' } : source === 'iconify' ? { iconifyId: 'mdi:github' } : {}) });
   const done = async (jobId: string) => {
     let current!: Job;
     await untilIcon(async () => { current = (await signed(api().get(`${prefix}/icon-refresh-jobs/${jobId}?pageSize=60`)).expect(200)).body; return current.state === 'completed'; }, 15_000);
@@ -58,6 +63,7 @@ describe('图标管理真实 PostgreSQL 集成', () => {
     png = await realIcon(); webp = await realIcon('webp');
     db = new Database(); await db.$connect(); app = await createApplication(false); await app.init();
     Object.assign(app.get(SiteIconService), { transport }); Object.assign(app.get(DashboardIcons), { transport });
+    Object.assign(app.get(IconifyIcons), { transport });
   });
   beforeEach(async () => {
     fixture = await seedFixtures(db); fail = false; delay = 0; peak = 0; barrier = null; transport.calls.length = 0;
@@ -67,7 +73,7 @@ describe('图标管理真实 PostgreSQL 集成', () => {
   after(async () => { await app?.close(); await db?.$disconnect(); await rm(root, { recursive: true, force: true }); });
 
   test('目录与配置只对所有者开放，写入必须有 CSRF，参数不能指定路径', async () => {
-    for (const path of ['/icon-library', '/icon-library/github/preview', `/bookmarks/${id('github')}/icon-config`, '/icon-refresh-jobs/' + randomUUID()]) {
+    for (const path of ['/icon-library', '/icon-library/github/preview', '/icon-library?source=iconify&keyword=github', '/icon-library/mdi%3Agithub/preview?source=iconify', `/bookmarks/${id('github')}/icon-config`, '/icon-refresh-jobs/' + randomUUID()]) {
       await api().get(prefix + path).expect(401);
     }
     await api().patch(`${prefix}/bookmarks/${id('github')}/icon-config`).set('Cookie', auth.cookie).set('Origin', origin).send({ source: 'auto', expectedVersion: null }).expect(403);
@@ -95,6 +101,44 @@ describe('图标管理真实 PostgreSQL 集成', () => {
     assert.equal((await db.user.findFirstOrThrow()).contentRevision, 3);
   });
 
+  test('Iconify 来源支持搜索、同源预览、持久保存和恢复自动，刷新跳过人工图标', async () => {
+    const results = await signed(api().get(prefix + '/icon-library?source=iconify&keyword=github&pageSize=1&page=2')).expect(200);
+    assert.equal(results.body.items[0].id, 'simple-icons:github'); assert.equal(results.body.total, 2);
+    await signed(api().get(prefix + '/icon-library/mdi%3Agithub/preview?source=iconify')).expect(200).expect('Content-Type', /image\/webp/);
+    const old = (await choose('github', await config(), 'dashboard').expect(200)).body;
+    const saved = (await choose('github', old, 'iconify').expect(200)).body;
+    assert.equal(saved.source, 'iconify'); assert.equal(saved.iconifyId, 'mdi:github'); assert.equal(saved.dashboardId, null);
+    const stored = await db.bookmarkIcon.findUniqueOrThrow({ where: { bookmarkId: id('github') } });
+    assert.equal(stored.dashboardCommit, null); assert.equal(stored.dashboardFormat, null); assert.equal(stored.uploadKey, null);
+    const fresh = new BookmarkIcons(db, app.get(DashboardIcons), app.get(IconUploads), new IconifyIcons(join(root, 'cache'), app.get(DashboardIcons).workQueue, transport));
+    assert.deepEqual(await fresh.config(fixture.ownerId, id('github')), saved);
+    const calls = transport.calls.length;
+    await api().get(`${prefix}/bookmarks/${id('github')}/icon`).expect(200).expect('Content-Type', /image\/webp/);
+    assert.equal(transport.calls.length, calls);
+    const refresh = await signed(api().post(prefix + '/icon-refresh-jobs')).send({ scope: 'selected', bookmarkIds: [id('github')] }).expect(202);
+    assert.equal((await done(refresh.body.id)).skipped, 1);
+    await choose('github', old, 'dashboard').expect(409);
+    const reset = (await choose('github', saved, 'auto').expect(200)).body;
+    assert.equal(reset.iconifyId, null); assert.equal(reset.dashboardId, null);
+  });
+
+  test('Iconify 参数与来源严格匹配，下载失败保留原配置', async () => {
+    const patch = (body: object) => signed(api().patch(`${prefix}/bookmarks/${id('github')}/icon-config`)).send({ expectedVersion: null, ...body });
+    for (const body of [{ source: 'iconify' }, { source: 'iconify', iconifyId: '../secret' }, { source: 'iconify', iconifyId: 'https://example.com/icon.svg' },
+      { source: 'iconify', iconifyId: 'mdi:github', dashboardId: 'github' }, { source: 'dashboard', dashboardId: 'github', iconifyId: 'mdi:github' },
+      { source: 'auto', iconifyId: 'mdi:github' }]) await patch(body).expect(400);
+    await signed(api().get(prefix + '/icon-library?source=unknown')).expect(400);
+    await signed(api().get(prefix + '/icon-library/mdi%3Agithub/preview')).expect(404);
+    const saved = (await upload('github', null).expect(201)).body;
+    fail = true;
+    await signed(api().patch(`${prefix}/bookmarks/${id('github')}/icon-config`)).send({ source: 'iconify', iconifyId: 'mdi:unavailable', expectedVersion: saved.version }).expect(503);
+    assert.deepEqual(await config(), saved);
+    fail = false;
+    await choose('inherited', await config('inherited'), 'iconify').expect(200);
+    await api().get(`${prefix}/bookmarks/${id('inherited')}/icon`).expect(404);
+    await signed(api().get(`${prefix}/bookmarks/${id('inherited')}/icon`)).expect(200);
+  });
+
   test('并发人工变更返回 409，不覆盖先提交者', async () => {
     const requests = await Promise.all([choose('github', await config(), 'auto'), choose('github', await config(), 'auto')]);
     assert.deepEqual(requests.map(item => item.status).sort(), [200, 409]);
@@ -103,7 +147,7 @@ describe('图标管理真实 PostgreSQL 集成', () => {
 
   test('新服务实例读取持久配置，资源准备期间删除不会留下悬空文件', async () => {
     const saved = (await upload('github', null).expect(201)).body;
-    const fresh = new BookmarkIcons(db, app.get(DashboardIcons), app.get(IconUploads));
+    const fresh = new BookmarkIcons(db, app.get(DashboardIcons), app.get(IconUploads), app.get(IconifyIcons));
     assert.equal((await fresh.config(fixture.ownerId, id('github'))).version, saved.version);
     const uploads = app.get(IconUploads), prepare = uploads.prepare;
     uploads.prepare = async (bookmarkId, file) => {

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, ServiceUnavailableException, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiProduces, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -9,10 +9,11 @@ import { Database } from './database';
 import { bookmarkOrigin, SiteIconService, type CachedIcon } from './site-icons';
 import { BookmarkIcons } from './bookmark-icons';
 import { DashboardIcons } from './dashboard-icons';
+import { IconifyIcons, isIconifyId } from './iconify-icons';
 import { IconWorkQueue } from './icon-work';
 import { IconRefreshJobs } from './icon-refresh';
 import { ICON_UPLOAD_MAX_BYTES, type IconUpload } from './icon-uploads';
-import { IconConfigDto, IconLibraryQueryDto, IconPageDto, IconRefreshDto, IconVersionDto } from './icon-dto';
+import { IconConfigDto, IconLibraryQueryDto, IconLibrarySourceDto, IconPageDto, IconRefreshDto, IconVersionDto } from './icon-dto';
 
 function imageResponse(response: Response, icon: CachedIcon | null) {
   if (!icon) { response.status(204); return undefined; }
@@ -100,14 +101,22 @@ export class SiteIconsController {
 
 @Controller('icon-library')
 class IconLibraryController {
-  constructor(private readonly library: DashboardIcons) {}
-  @Get() @ApiOperation({ summary: '搜索 Dashboard Icons 本地目录' })
-  search(@Query() query: IconLibraryQueryDto) { return this.library.search(query.keyword, query.page, query.pageSize); }
-  @Get(':id/preview') @ApiOperation({ summary: '读取图标库同源预览' }) @ApiProduces('image/png', 'image/webp')
-  async preview(@Param('id') id: string, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    if (!this.library.entry(id)) throw new NotFoundException('图标不存在');
+  constructor(private readonly library: DashboardIcons, private readonly iconify: IconifyIcons) {}
+  @Get() @ApiOperation({ summary: '按来源搜索 Dashboard Icons 或 Iconify 图标' })
+  async search(@Query() query: IconLibraryQueryDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    if (query.source === 'dashboard') return this.library.search(query.keyword, query.page, query.pageSize);
     const fetch = iconRequest(request, response);
-    try { return imageResponse(response, (await this.library.select(id, fetch.signal))?.icon || null); }
+    try {
+      const result = await this.iconify.search(query.keyword, query.page, query.pageSize, fetch.signal);
+      if (!result) throw new ServiceUnavailableException('暂时无法搜索 Iconify，请稍后重试');
+      return result;
+    } finally { fetch.dispose(); }
+  }
+  @Get(':id/preview') @ApiOperation({ summary: '读取图标库同源预览' }) @ApiProduces('image/png', 'image/webp')
+  async preview(@Param('id') id: string, @Query() query: IconLibrarySourceDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    if (query.source === 'iconify' ? !isIconifyId(id) : !this.library.entry(id)) throw new NotFoundException('图标不存在');
+    const fetch = iconRequest(request, response);
+    try { return imageResponse(response, query.source === 'iconify' ? await this.iconify.read(id, fetch.signal) : (await this.library.select(id, fetch.signal))?.icon || null); }
     finally { fetch.dispose(); }
   }
 }
@@ -126,6 +135,7 @@ class IconRefreshController {
   controllers: [SiteIconsController, IconLibraryController, IconRefreshController],
   providers: [IconWorkQueue, BookmarkIcons, IconRefreshJobs,
     { provide: SiteIconService, useFactory: (config: AppConfig, queue: IconWorkQueue) => new SiteIconService(config.iconCacheDir, undefined, undefined, undefined, queue), inject: [AppConfig, IconWorkQueue] },
-    { provide: DashboardIcons, useFactory: (config: AppConfig, queue: IconWorkQueue) => new DashboardIcons(config.iconCacheDir, queue), inject: [AppConfig, IconWorkQueue] }],
+    { provide: DashboardIcons, useFactory: (config: AppConfig, queue: IconWorkQueue) => new DashboardIcons(config.iconCacheDir, queue), inject: [AppConfig, IconWorkQueue] },
+    { provide: IconifyIcons, useFactory: (config: AppConfig, queue: IconWorkQueue) => new IconifyIcons(config.iconCacheDir, queue), inject: [AppConfig, IconWorkQueue] }],
 })
 export class SiteIconsModule {}

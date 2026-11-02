@@ -30,3 +30,15 @@
 .icon-refresh-results li span{color:var(--muted);font-size:11px;flex-shrink:0}
 @media(max-width:1000px){.editor-layout>.editor-side{display:block}.editor-side>.preview-box{display:none}}
 @media(max-width:720px){.icon-library-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.icon-refresh-notice{margin:12px 14px 0;padding:14px}.bookmark-icon-editor{padding:16px}.icon-refresh-results li{align-items:flex-start}.icon-refresh-results li span{max-width:45%;text-align:right}}
+:root{--iconify-preview-bg:#fff}
+.icon-library-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+.icon-library-source{flex:1;max-width:260px;margin-bottom:0}
+.icon-library-link{display:inline-flex;align-items:center;gap:6px;min-height:38px;flex-shrink:0;color:var(--muted);font-size:11px}
+.icon-library-link:hover{color:var(--primary)}
+.icon-library-link .icon{width:14px;height:14px}
+.icon-library-prompt{padding:32px 0}
+.library-icon-preview.iconify{background:var(--iconify-preview-bg);border-radius:8px;padding:8px}
+.icon-library-option:disabled{opacity:.6;cursor:wait}
+.icon-library-option:focus-visible,.icon-library-source select:focus-visible,.icon-library-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.icon-library-actions>.subline{min-width:0;overflow-wrap:anywhere}
+.icon-library-actions>.btn{flex-shrink:0}

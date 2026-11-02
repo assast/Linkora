@@ -1,25 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ApiError, StaleSessionError } from './api';
 import { Button, Icon, Loading, Modal, QueryError, SiteIcon } from './components';
 import { errorMessage, useApp } from './state';
-import type { Bookmark, BookmarkIconConfig, IconLibraryPage } from './types';
+import type { Bookmark, BookmarkIconConfig, IconLibraryPage, IconLibrarySource } from './types';
 
-function LibraryPreview({ id }: { id: string }) {
+function LibraryPreview({ id, source }: { id: string; source: IconLibrarySource }) {
   const [failed, setFailed] = useState(false);
-  return <span className="library-icon-preview">{failed ? <span>预览暂不可用</span> : <img src={`/api/v1/icon-library/${encodeURIComponent(id)}/preview`} alt="" loading="lazy" onError={() => setFailed(true)} />}</span>;
+  return <span className={`library-icon-preview ${source}`}>{failed ? <span>预览暂不可用</span> : <img src={`/api/v1/icon-library/${encodeURIComponent(id)}/preview?source=${source}`} alt="" loading="lazy" onError={() => setFailed(true)} />}</span>;
 }
 
 export function BookmarkIconEditor({ bookmark, url }: { bookmark?: Bookmark; url: string }) {
   const app = useApp(), client = useQueryClient();
   const [open, setOpen] = useState(false), [keyword, setKeyword] = useState(''), [page, setPage] = useState(1), [selected, setSelected] = useState('');
+  const [librarySource, setLibrarySource] = useState<IconLibrarySource>('dashboard'), [search, setSearch] = useState('');
+  const sourceId = useId();
   const [file, setFile] = useState<File | null>(null), [preview, setPreview] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const key = ['data', app.scope, 'icon-config', bookmark?.id];
   const query = useQuery({ queryKey: key, enabled: !!bookmark && app.identity.authenticated,
     queryFn: ({ signal }) => app.call<BookmarkIconConfig>(`/bookmarks/${bookmark!.id}/icon-config`, { signal }) });
-  const library = useQuery({ queryKey: ['data', app.scope, 'icon-library', keyword, page], enabled: open && app.identity.authenticated,
-    queryFn: ({ signal }) => app.call<IconLibraryPage>('/icon-library?' + new URLSearchParams({ keyword, page: String(page), pageSize: '24' }), { signal }) });
+  const needsKeyword = librarySource === 'iconify' && !search;
+  const library = useQuery({ queryKey: ['data', app.scope, 'icon-library', librarySource, search, page], enabled: open && app.identity.authenticated && !needsKeyword,
+    queryFn: ({ signal }) => app.call<IconLibraryPage>('/icon-library?' + new URLSearchParams({ source: librarySource, keyword: search, page: String(page), pageSize: '24' }), { signal }) });
+  useEffect(() => {
+    if (keyword.trim() === search) return;
+    const timer = setTimeout(() => { setSearch(keyword.trim()); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [keyword, search]);
   useEffect(() => {
     if (!file) { setPreview(''); return; }
     const objectUrl = URL.createObjectURL(file); setPreview(objectUrl);
@@ -48,14 +56,17 @@ export function BookmarkIconEditor({ bookmark, url }: { bookmark?: Bookmark; url
     void apply(body);
   };
   const source = config?.source || 'auto';
-  const labels = { auto: '自动 Favicon', dashboard: 'Dashboard Icons', upload: '自定义上传' };
+  const labels = { auto: '自动 Favicon', dashboard: 'Dashboard Icons', iconify: 'Iconify', upload: '自定义上传' };
   return <section className="panel bookmark-icon-editor" aria-label="书签图标设置"><h3>书签图标</h3>
     {!bookmark ? <p className="subline">保存书签后可选择或上传图标。</p> : <>
-      <div className="icon-current"><SiteIcon bookmarkId={paused ? undefined : bookmark.id} title={bookmark.title} url={url} /><div><strong>{labels[source]}</strong>{config?.dashboardId && <small>{config.dashboardId}</small>}</div></div>
+      <div className="icon-current"><SiteIcon bookmarkId={paused ? undefined : bookmark.id} title={bookmark.title} url={url} /><div><strong>{labels[source]}</strong>{(config?.dashboardId || config?.iconifyId) && <small>{config.dashboardId || config.iconifyId}</small>}</div></div>
       {paused && <p className="subline">先保存网站地址，再修改图标。</p>}
       {query.isPending && <Loading />}{query.isError && <QueryError retry={() => void query.refetch()} />}
       <fieldset disabled={paused || busy || !config} className="icon-settings-fields">
-        <div className="icon-source-actions"><Button onClick={() => { setSelected(config?.dashboardId || ''); setError(''); setOpen(true); }}>从图标库选择</Button>
+        <div className="icon-source-actions"><Button onClick={() => {
+          setLibrarySource(config?.source === 'iconify' ? 'iconify' : 'dashboard'); setKeyword(''); setSearch(''); setPage(1);
+          setSelected(config?.iconifyId || config?.dashboardId || ''); setError(''); setOpen(true);
+        }}>从图标库选择</Button>
           <Button disabled={source === 'auto'} onClick={() => void apply({ source: 'auto', expectedVersion: config?.version })}>恢复自动</Button></div>
         <label className="field icon-upload-field"><span>上传图片</span><input aria-label="上传书签图标" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
           const next = event.target.files?.[0]; event.target.value = ''; setError('');
@@ -70,16 +81,20 @@ export function BookmarkIconEditor({ bookmark, url }: { bookmark?: Bookmark; url
       </fieldset>
     </>}
     {error && <p className="modal-error" role="alert">{error}</p>}
-    {open && <Modal title="选择 Dashboard 图标" description="按名称搜索并选择图标，浅色或深色版本由你决定。" wide onClose={() => { if (!busy) setOpen(false); }}>
-      <label className="field-search"><Icon name="search" /><input aria-label="搜索图标库" value={keyword} maxLength={100} placeholder="搜索名称，例如 github、docker…" onChange={event => { setKeyword(event.target.value); setPage(1); }} /></label>
-      {library.isPending ? <Loading /> : library.isError ? <QueryError retry={() => void library.refetch()} /> : <>
-        <div className="icon-library-grid">{library.data.items.map(item => <button type="button" className={`icon-library-option ${selected === item.id ? 'selected' : ''}`} key={item.id} aria-label={`选择图标 ${item.id}`} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>
-          <LibraryPreview id={item.id} /><strong>{item.id}</strong></button>)}</div>
+    {open && <Modal title="从图标库选择" description="选择图标来源，搜索并预览后应用到书签。" wide onClose={() => { if (!busy) setOpen(false); }}>
+      <div className="icon-library-toolbar"><div className="field icon-library-source"><label htmlFor={sourceId}>图标来源</label><select id={sourceId} value={librarySource} disabled={busy} onChange={event => {
+        setLibrarySource(event.target.value as IconLibrarySource); setSelected(''); setKeyword(''); setSearch(''); setPage(1); setError('');
+      }}><option value="dashboard">Dashboard Icons</option><option value="iconify">Iconify</option></select></div>
+        <a className="icon-library-link" href={librarySource === 'iconify' ? 'https://icon-sets.iconify.design/' : 'https://dashboardicons.com/'} target="_blank" rel="noreferrer">浏览图标库<Icon name="external" /></a></div>
+      <label className="field-search"><Icon name="search" /><input aria-label="搜索图标库" value={keyword} disabled={busy} maxLength={100} placeholder={librarySource === 'iconify' ? '搜索 Iconify，例如 github、home…' : '搜索名称，例如 github、docker…'} onChange={event => setKeyword(event.target.value)} /></label>
+      {needsKeyword ? <p className="icon-library-prompt subline">输入关键词，搜索 Iconify 图标。</p> : library.isPending ? <Loading /> : library.isError ? <QueryError retry={() => void library.refetch()} /> : <>
+        <div className="icon-library-grid">{library.data.items.map(item => <button type="button" className={`icon-library-option ${selected === item.id ? 'selected' : ''}`} key={`${librarySource}:${item.id}`} disabled={busy} aria-label={`选择图标 ${item.id}`} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>
+          <LibraryPreview id={item.id} source={librarySource} /><strong>{item.id}</strong></button>)}</div>
         {!library.data.total && <p className="subline">没有匹配的图标，试试其他名称。</p>}
-        <div className="icon-library-pagination"><Button disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</Button><span>{page} / {Math.max(1, Math.ceil(library.data.total / 24))}</span><Button disabled={page * 24 >= library.data.total} onClick={() => setPage(page + 1)}>下一页</Button></div>
+        <div className="icon-library-pagination"><Button disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>上一页</Button><span>{page} / {Math.max(1, Math.ceil(library.data.total / 24))}</span><Button disabled={busy || page * 24 >= library.data.total} onClick={() => setPage(page + 1)}>下一页</Button></div>
       </>}
       {error && <p className="modal-error" role="alert">{error}</p>}
-      <div className="editor-actions"><span className="subline">{selected || '请选择一个图标'}</span><span className="push" /><Button className="primary" disabled={!selected || busy} onClick={() => void apply({ source: 'dashboard', dashboardId: selected, expectedVersion: config?.version })}>{busy ? '应用中…' : '应用图标'}</Button></div>
+      <div className="editor-actions icon-library-actions"><span className="subline">{selected || '请选择一个图标'}</span><span className="push" /><Button className="primary" disabled={!selected || busy} onClick={() => void apply({ source: librarySource, [librarySource === 'iconify' ? 'iconifyId' : 'dashboardId']: selected, expectedVersion: config?.version })}>{busy ? '应用中…' : '应用图标'}</Button></div>
     </Modal>}
   </section>;
 }

@@ -21,7 +21,7 @@ function SiteIconBody({ title, url, bookmarkId, generation }: { title: string; u
   const colors = ['#8976db', '#56a6cf', '#429f91', '#cf9874', '#b47eb0', '#b39b63'];
   const color = colors[[...host].reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length];
   const fallback = Array.from(title.trim())[0]?.toLocaleUpperCase() || Array.from(fallbackHost)[0]?.toLocaleUpperCase() || APP_NAME[0];
-  return <span className="fav-ico" style={{ '--favicon-bg': color } as CSSProperties} aria-hidden="true">
+  return <span className={`fav-ico${loaded ? ' image-loaded' : ''}`} style={{ '--favicon-bg': color } as CSSProperties} aria-hidden="true">
     {!loaded && fallback}
     {bookmarkId && !failed && <img src={`/api/v1/bookmarks/${encodeURIComponent(bookmarkId)}/icon${generation ? `?v=${generation}` : ''}`} alt="" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
   </span>;

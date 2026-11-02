@@ -15,6 +15,7 @@
 | `202610310001_permanent_sessions` | [永久会话](变更记录/202610310001_permanent_sessions.sql) | 会话到期时间允许 NULL |
 | `202611010001_bookmark_icons` | [书签图标](变更记录/202611010001_bookmark_icons.sql) | 图标来源枚举、按书签保存的图标配置及来源字段约束 |
 | `202611020001_secondary_url` | [书签地址2](变更记录/202611020001_secondary_url.sql) | 为书签增加可空的 `url2`，已有原地址保持不变 |
+| `202611020002_iconify_source` | [Iconify 图标来源](变更记录/202611020002_iconify_source.sql) | 新增 `ICONIFY` 来源与 `iconify_id`，已有图标配置保持不变 |
 
 `init.sql` 已覆盖以上所有版本。初始化后无需再次执行这些增量 SQL。
 
@@ -65,13 +66,14 @@ psql -v ON_ERROR_STOP=1 --single-transaction -f docs/SQL/变更记录/2026110100
 node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202611010001_bookmark_icons --schema apps/api/prisma/schema.prisma
 ```
 
-如果是用 `init.sql` 初始化的新库，依次登记它已经覆盖的四个版本：
+如果是用 `init.sql` 初始化的新库，依次登记它已经覆盖的五个版本：
 
 ```sh
 node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202610300001_initial --schema apps/api/prisma/schema.prisma
 node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202610310001_permanent_sessions --schema apps/api/prisma/schema.prisma
 node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202611010001_bookmark_icons --schema apps/api/prisma/schema.prisma
 node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202611020001_secondary_url --schema apps/api/prisma/schema.prisma
+node --env-file-if-exists=.env apps/api/node_modules/prisma/build/index.js migrate resolve --applied 202611020002_iconify_source --schema apps/api/prisma/schema.prisma
 pnpm db:migrate
 ```
 
