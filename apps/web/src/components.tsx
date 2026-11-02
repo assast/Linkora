@@ -1,4 +1,4 @@
-import { useContext, useId, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowLeft, ArrowRight, Bookmark as BookmarkIcon, Check, ChevronDown, ChevronRight, Download, ExternalLink, Filter, Folder, FolderPlus, Github, GripVertical, Grid2X2, Link as LinkIcon, List, LoaderCircle, Lock, LogOut, Menu, Moon, MoreHorizontal, Plus, Save, Search, Settings, ShieldCheck, Star, Sun, Tag, Trash2, Unlock, X } from 'lucide-react';
 import { domain } from './types';
@@ -12,6 +12,20 @@ export function Icon({ name, className = '' }: { name: keyof typeof icons; class
 }
 export function Button({ className = '', children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`btn ${className}`} {...props}>{children}</button>;
+}
+export function SearchInput({ value, onValueChange, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onCompositionStart' | 'onCompositionEnd'> & {
+  value: string; onValueChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const composing = useRef(false);
+  useEffect(() => { if (!composing.current) setDraft(value); }, [value]);
+  const update = (next: string) => {
+    setDraft(next);
+    if (!composing.current && next !== value) onValueChange(next);
+  };
+  return <input {...props} value={draft} onChange={event => update(event.currentTarget.value)}
+    onCompositionStart={() => { composing.current = true; }}
+    onCompositionEnd={event => { composing.current = false; update(event.currentTarget.value); }} />;
 }
 function SiteIconBody({ title, url, bookmarkId, generation }: { title: string; url: string; bookmarkId?: string; generation: number }) {
   const [loaded, setLoaded] = useState(false), [failed, setFailed] = useState(false);

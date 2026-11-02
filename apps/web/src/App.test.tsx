@@ -75,6 +75,64 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+describe('书签搜索中文输入', () => {
+  const searchRequests = () => vi.mocked(fetch).mock.calls.map(([input]) => new URL(input as string, 'http://localhost'))
+    .filter(url => url.pathname === '/api/v1/bookmarks' && url.searchParams.has('keyword'));
+
+  it.each([
+    ['全局搜索书签', '/home'],
+    ['全局搜索书签', '/bookmarks?sort=title&page=2'],
+    ['搜索书签', '/bookmarks?sort=title&page=2'],
+  ])('%s 在 %s 组词时保留输入，选词后才搜索', async (label, path) => {
+    renderApp(path);
+    const input = await screen.findByRole('textbox', { name: label });
+    input.focus();
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'zhong' } });
+    expect(input).toHaveValue('zhong');
+    expect(input).toHaveFocus();
+    expect(searchRequests()).toHaveLength(0);
+    fireEvent.change(input, { target: { value: '中文' } });
+    expect(input).toHaveValue('中文');
+    expect(searchRequests()).toHaveLength(0);
+    fireEvent.compositionEnd(input, { data: '中文' });
+    fireEvent.change(input, { target: { value: '中文' } });
+    await waitFor(() => expect(searchRequests().map(url => url.searchParams.get('keyword'))).toEqual(['中文']));
+    expect(screen.getByRole('textbox', { name: '全局搜索书签' })).toHaveValue('中文');
+    expect(screen.getByRole('textbox', { name: '搜索书签' })).toHaveValue('中文');
+    expect(searchRequests()[0].searchParams.has('page')).toBe(false);
+    expect(searchRequests()[0].searchParams.get('sort')).toBe(label === '搜索书签' ? 'title' : null);
+    expect(input).toHaveFocus();
+  });
+
+  it.each(['全局搜索书签', '搜索书签'])('%s 保持英文、中文粘贴和清空搜索可用', async label => {
+    const user = userEvent.setup();
+    renderApp('/bookmarks?sort=title&page=2');
+    const input = await screen.findByRole('textbox', { name: label });
+    await user.type(input, 'test');
+    await waitFor(() => expect(searchRequests().at(-1)?.searchParams.get('keyword')).toBe('test'));
+    await user.clear(input);
+    await user.paste('中文');
+    await waitFor(() => expect(searchRequests().at(-1)?.searchParams.get('keyword')).toBe('中文'));
+    await user.clear(input);
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '全局搜索书签' })).toHaveValue('');
+      expect(screen.getByRole('textbox', { name: '搜索书签' })).toHaveValue('');
+    });
+  });
+
+  it('从网址恢复关键词，切换导航后同步重置两个输入框', async () => {
+    renderApp('/bookmarks?keyword=中文');
+    expect(await screen.findByRole('textbox', { name: '全局搜索书签' })).toHaveValue('中文');
+    expect(screen.getByRole('textbox', { name: '搜索书签' })).toHaveValue('中文');
+    await userEvent.click(screen.getByRole('button', { name: /^星标收藏/ }));
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '全局搜索书签' })).toHaveValue('');
+      expect(screen.getByRole('textbox', { name: '搜索书签' })).toHaveValue('');
+    });
+  });
+});
+
 describe('书签图标管理界面', () => {
   it('未保存书签和未保存 URL 暂停人工配置，不为新书签请求配置', async () => {
     authenticated = true;

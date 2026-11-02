@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Button, Empty, Icon, Loading, PrivateMark, QueryError, SiteIcon } from './components';
+import { Button, Empty, Icon, Loading, PrivateMark, QueryError, SearchInput, SiteIcon } from './components';
 import { useApp, errorMessage } from './state';
 import { StaleSessionError } from './api';
 import { domain, resolveBookmarkUrl, type AddressMode, type Bookmark, type Impact, type Operation, type Page } from './types';
@@ -119,7 +119,7 @@ export function LibraryPage() {
     {category && <div className="category-actions"><Button disabled={!categoryBooks.data?.length} onClick={openCategoryBooks}><Icon name="external" />打开全部书签</Button>
       {categoryBooks.isError ? <Button onClick={() => void categoryBooks.refetch()}>重新加载分类书签</Button>
         : <span>{categoryBooks.isPending ? '正在加载分类书签…' : `共 ${categoryBooks.data?.length ?? 0} 条 · 包含子分类`}</span>}</div>}
-    <div className="library-toolbar"><label className="field-search"><Icon name="search" /><input id="library-search" aria-label="搜索书签" placeholder="搜索书签名称、域名、标签或路径…" value={params.get('keyword') || ''} onChange={event => changeFilter('keyword', event.target.value)} /></label>
+    <div className="library-toolbar"><label className="field-search"><Icon name="search" /><SearchInput id="library-search" aria-label="搜索书签" placeholder="搜索书签名称、域名、标签或路径…" value={params.get('keyword') || ''} onValueChange={value => changeFilter('keyword', value)} /></label>
       <Button className={showFilters ? 'soft' : ''} onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}><Icon name="filter" />筛选</Button>
       <select className="control-select" aria-label="排序" value={sortValue} onChange={event => changeFilter('sort', event.target.value)}><option value="newest">最近添加</option><option value="oldest">最早添加</option><option value="frequent">访问最多</option><option value="title">名称 A-Z</option></select>
       <label className="address-control">访问地址<select className="control-select" aria-label="访问地址" value={app.addressMode} onChange={event => app.updateAddressMode(event.target.value as AddressMode)}><option value="url">地址</option><option value="url2">地址2</option></select></label>
