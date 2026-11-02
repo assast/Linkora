@@ -220,6 +220,61 @@ describe('真实 PostgreSQL API 业务边界', () => {
     await authorized(api().post(prefix + '/bookmarks'), auth).send({ title: 'x', url: 'https://valid.test/', categoryId: randomUUID() }).expect(404);
   });
 
+  test('地址2兼容旧请求，并贯通详情、列表、首页和导出', async () => {
+    const auth = await login();
+    const single = await authorized(api().post(prefix + '/bookmarks'), auth).send({ title: '单地址', url: 'https://single.test/' }).expect(201);
+    assert.equal(single.body.url2, null);
+    const created = await authorized(api().post(prefix + '/bookmarks'), auth).send({ title: '双地址', url: 'https://public.test/', url2: '  http://bookmark_service.internal:8080/  ', isFavorite: true }).expect(201);
+    const expected = { url: 'https://public.test/', url2: 'http://bookmark_service.internal:8080/' };
+    const check = (book: { url: string; url2: string | null }) => assert.deepEqual({ url: book.url, url2: book.url2 }, expected);
+    check(created.body);
+    check((await api().get(prefix + `/bookmarks/${created.body.id}`).expect(200)).body);
+    check((await api().get(prefix + '/bookmarks').expect(200)).body.items.find((book: { id: string }) => book.id === created.body.id));
+    const home = (await api().get(prefix + '/home').expect(200)).body;
+    for (const books of [home.frequent, home.recent]) check(books.find((book: { id: string }) => book.id === created.body.id));
+    const exported = await (await batch(auth, 'EXPORT', [created.body.id, single.body.id])).expect(201);
+    assert.equal(exported.body.formatVersion, 1);
+    check(exported.body.bookmarks.find((book: { id: string }) => book.id === created.body.id));
+    assert.equal(exported.body.bookmarks.find((book: { id: string }) => book.id === single.body.id).url2, null);
+  });
+
+  test('地址2的部分更新区分保留、替换和清空，非法值不部分写入', async () => {
+    const auth = await login();
+    const path = prefix + `/bookmarks/${id('github')}`;
+    const patch = (data: object) => authorized(api().patch(path), auth).send(data);
+    await patch({ url2: 'http://internal_service/' }).expect(200);
+    const omitted = await patch({ title: '修改标题' }).expect(200);
+    assert.equal(omitted.body.url2, 'http://internal_service/');
+    for (const url2 of [null, '', '  ']) {
+      await patch({ url2: 'https://alternate.test/' }).expect(200);
+      const cleared = await patch({ url2 }).expect(200);
+      assert.equal(cleared.body.url2, null); assert.equal(cleared.body.url, 'https://github.com/');
+    }
+    const before = await db.bookmark.findUniqueOrThrow({ where: { id: id('github') } });
+    for (const url2 of ['javascript:alert(1)', 12, false, {}, 'https://example.test/' + 'a'.repeat(4096)]) {
+      await patch({ title: '不应保存', url2 }).expect(400);
+    }
+    assert.deepEqual(await db.bookmark.findUniqueOrThrow({ where: { id: id('github') } }), before);
+  });
+
+  test('地址2遵循显式和继承私密权限', async () => {
+    const auth = await login();
+    for (const name of ['secret', 'inherited']) {
+      const path = prefix + `/bookmarks/${id(name)}`;
+      const url2 = `https://private-alternate.test/${name}`;
+      await authorized(api().patch(path), auth).send({ url2 }).expect(200);
+      assert.equal((await authorized(api().get(path), auth).expect(200)).body.url2, url2);
+      await api().get(path).expect(404);
+    }
+    for (const path of ['/bookmarks', '/home']) {
+      const response = await api().get(prefix + path).expect(200);
+      assert.ok(!JSON.stringify(response.body).includes('private-alternate.test'));
+    }
+    const exported = await (await batch(auth, 'EXPORT', [id('secret'), id('inherited')], {}, { confirmedPrivateExport: true })).expect(201);
+    assert.equal(exported.body.bookmarks.length, 2);
+    assert.ok(exported.body.bookmarks.every((book: { url2: string }) => book.url2.startsWith('https://private-alternate.test/')));
+  });
+
   test('普通资料修改不误写继承私密标志', async () => {
     const auth = await login();
     const response = await authorized(api().patch(prefix + `/bookmarks/${id('inherited')}`), auth).send({ title: '更新标题', notes: '我的备注' }).expect(200);

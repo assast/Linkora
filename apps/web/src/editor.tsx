@@ -5,18 +5,18 @@ import { toast } from 'sonner';
 import { Button, Empty, Icon, Loading, QueryError, SiteIcon } from './components';
 import { errorMessage, useApp } from './state';
 import { StaleSessionError } from './api';
-import { domain, type Bookmark } from './types';
+import { domain, resolveBookmarkUrl, type Bookmark } from './types';
 import { BookmarkIconEditor } from './bookmark-icons';
 
 function BookmarkForm({ initial }: { initial?: Bookmark }) {
   const app = useApp(); const navigate = useNavigate();
-  const [form, setForm] = useState({ title: initial?.title || '', url: initial?.url || '', description: initial?.description || '', notes: initial?.notes || '', categoryId: initial?.categoryId || '', tags: initial?.tags.join(', ') || '', isFavorite: initial?.isFavorite || false, isPrivate: initial?.isPrivate || false });
+  const [form, setForm] = useState({ title: initial?.title || '', url: initial?.url || '', url2: initial?.url2 || '', description: initial?.description || '', notes: initial?.notes || '', categoryId: initial?.categoryId || '', tags: initial?.tags.join(', ') || '', isFavorite: initial?.isFavorite || false, isPrivate: initial?.isPrivate || false });
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const category = app.flatCategories.find(item => item.id === form.categoryId);
   const inherited = category?.effectivePrivate || false;
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError('');
-    const body = { ...form, categoryId: form.categoryId || null, tags: form.tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean) };
+    const body = { ...form, url2: form.url2.trim() || null, categoryId: form.categoryId || null, tags: form.tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean) };
     try {
       const result = initial ? await app.saveWithPreview<Bookmark>('bookmarks', initial.id, body) : await app.call<Bookmark>('/bookmarks', { method: 'POST', body });
       if (!result) return;
@@ -29,10 +29,11 @@ function BookmarkForm({ initial }: { initial?: Bookmark }) {
     try { await app.call(`/bookmarks/${initial.id}`, { method: 'DELETE' }); await app.refresh(); navigate('/bookmarks'); toast.success('书签已删除'); }
     catch (error) { if (!(error instanceof StaleSessionError)) setError(errorMessage(error)); }
   };
-  return <><div className="page-head"><div><h1>{initial ? '书签详情 / 编辑' : '添加新书签'}</h1><div className="subline">为值得再次打开的网站，留一个清楚的位置。</div></div>{initial && <a className="btn" href={initial.url} target="_blank" rel="noopener noreferrer"><Icon name="external" />访问网站</a>}</div>
+  return <><div className="page-head"><div><h1>{initial ? '书签详情 / 编辑' : '添加新书签'}</h1><div className="subline">为值得再次打开的网站，留一个清楚的位置。</div></div>{initial && <a className="btn" href={resolveBookmarkUrl(initial, app.addressMode)} target="_blank" rel="noopener noreferrer"><Icon name="external" />访问网站</a>}</div>
     <div className="editor-layout"><form className="panel editor-form" onSubmit={submit}><div className="form-head"><Icon name="link" />基本信息</div><div className="form-grid">
       <div className="field"><label htmlFor="bookmark-title">书签名称 <span className="req">*</span></label><input id="bookmark-title" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} required maxLength={200} placeholder="例如：GitHub" /></div>
       <div className="field"><label htmlFor="bookmark-url">网站地址 <span className="req">*</span></label><input id="bookmark-url" type="url" value={form.url} onChange={event => setForm({ ...form, url: event.target.value })} required maxLength={4096} placeholder="https://example.com" /></div></div>
+      <div className="field"><label htmlFor="bookmark-url2">地址2（可选）</label><input id="bookmark-url2" type="url" value={form.url2} onChange={event => setForm({ ...form, url2: event.target.value })} maxLength={4096} placeholder="https://example.com/alternate" aria-describedby="bookmark-url2-help" /><small id="bookmark-url2-help">切换到地址2时使用；未配置则使用原地址。两个地址共用书签的可见性设置。</small></div>
       <div className="field"><label htmlFor="bookmark-description">简要说明</label><input id="bookmark-description" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} maxLength={1000} placeholder="这个网站可以帮你做什么？" /></div>
       <div className="form-grid"><div className="field"><label htmlFor="bookmark-category">所在分类</label><select id="bookmark-category" value={form.categoryId} onChange={event => setForm({ ...form, categoryId: event.target.value })}><option value="">未分类</option>{app.flatCategories.map(item => <option value={item.id} key={item.id}>{item.path}{item.effectivePrivate ? ' · 私密' : ''}</option>)}</select><small>私密分类会自动保护其中的书签</small></div>
         <div className="field"><label htmlFor="bookmark-tags">标签</label><input id="bookmark-tags" value={form.tags} onChange={event => setForm({ ...form, tags: event.target.value })} placeholder="代码, 常用, 工具" /><small>以逗号分隔，最多 20 个标签</small></div></div>

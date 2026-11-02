@@ -9,7 +9,7 @@ type BookState = { id: string; title: string; categoryId: string | null; isPriva
 type Change = { kind: 'category'; id: string; data: CategoryPatchDto }
   | { kind: 'bookmark'; id: string; data: BookmarkPatchDto }
   | { kind: 'batch'; data: BatchDto };
-const BOOK_FIELDS = ['title', 'url', 'categoryId', 'description', 'notes', 'isPrivate', 'isFavorite'] as const;
+const BOOK_FIELDS = ['title', 'url', 'url2', 'categoryId', 'description', 'notes', 'isPrivate', 'isFavorite'] as const;
 const CATEGORY_FIELDS = ['name', 'parentId', 'isPrivate', 'sortOrder'] as const;
 const defined = <T, K extends keyof T>(input: T, keys: readonly K[]): Pick<T, K> =>
   Object.fromEntries(keys.filter(key => input[key] !== undefined).map(key => [key, input[key]])) as Pick<T, K>;

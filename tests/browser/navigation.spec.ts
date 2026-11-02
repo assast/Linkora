@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const books = Array.from({ length: 3 }, (_, index) => ({ id: `book-${index}`, title: `测试书签 ${index}`,
-  url: `https://bookmark.example.test/${index}`, description: '', notes: '', categoryId: index ? 'child' : 'category',
+  url: `https://bookmark.example.test/${index}`, url2: index === 0 ? 'https://alternate.example.test/0' : null, description: '', notes: '', categoryId: index ? 'child' : 'category',
   categoryPath: index ? '测试分类 / 子分类' : '测试分类', tags: ['测试标签'], isPrivate: false, effectivePrivate: false,
   inheritedPrivate: false, isFavorite: false, visitCount: 0, createdAt: '2026-10-31', updatedAt: '2026-10-31' }));
 
@@ -111,6 +111,86 @@ test('打开分类全部书签使用独立标签页并解除 opener', async ({ p
     expect(await opened[i].evaluate(() => window.opener)).toBeNull();
   }
   await expect(page).toHaveURL(/\/bookmarks\?categoryId=category$/);
+});
+
+test('统一地址切换保留单地址回退、原生链接和浏览器记忆', async ({ page, context, isMobile }, info) => {
+  await context.route('https://{bookmark,alternate}.example.test/**', route => route.fulfill({ body: '<title>地址切换测试</title>' }));
+  await page.goto('/bookmarks');
+  const mode = page.getByRole('combobox', { name: '访问地址' });
+  await expect(mode).toHaveValue('url');
+  await expect(page.getByRole('link', { name: books[0].title, exact: true })).toBeVisible();
+  if (!isMobile) {
+    await page.getByRole('combobox', { name: '排序' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(mode).toBeFocused();
+  }
+  await mode.selectOption('url2');
+  await expect(mode).toHaveValue('url2');
+  const writes: string[] = [];
+  page.on('request', request => { if (request.method() !== 'GET') writes.push(request.url()); });
+  for (const view of ['列表', '卡片']) {
+    await page.getByRole('button', { name: `紧凑${view}` }).click();
+    for (const value of ['url', 'url2']) {
+      await mode.selectOption(value);
+      const double = page.getByRole('link', { name: books[0].title, exact: true });
+      await expect(double).toHaveAttribute('href', value === 'url2' ? books[0].url2! : books[0].url);
+      const surface = double.locator('xpath=ancestor::*[contains(@class,"bookmark-row") or contains(@class,"bookmark-tile")][1]');
+      await expect(surface).toContainText(value === 'url2' ? 'alternate.example.test' : 'bookmark.example.test');
+      await expect(page.getByRole('link', { name: books[1].title, exact: true })).toHaveAttribute('href', books[1].url);
+    }
+  }
+  expect(writes).toEqual([]);
+  await expectBookmarkPopup(page, () => page.getByRole('link', { name: books[0].title, exact: true }).click(), books[0].url2!);
+  await page.getByRole('link', { name: books[1].title, exact: true }).focus();
+  await expectBookmarkPopup(page, () => page.keyboard.press('Enter'), books[1].url);
+  await page.reload();
+  await expect(mode).toHaveValue('url2');
+  await expect(page.getByRole('link', { name: books[0].title, exact: true })).toHaveAttribute('href', books[0].url2!);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('secondary-url-library.png') });
+  await context.route('**/api/v1/home', route => route.fulfill({ json: { frequent: [books[0]], recent: books.slice(0, 2), counts: { bookmarks: 3, categories: 1, favorites: 1 } } }));
+  await page.goto('/home');
+  for (const selector of ['.quick-item', '.recent-row']) {
+    const link = page.locator(selector).filter({ hasText: books[0].title });
+    await expect(link).toHaveAttribute('href', books[0].url2!);
+    await expect(link).toContainText('alternate.example.test');
+  }
+});
+
+test('地址2模式跨页打开分类及子分类，单地址逐条回退', async ({ page, context }) => {
+  const all = Array.from({ length: 101 }, (_, index) => ({ ...books[0], id: `full-${index}`, title: `跨页书签 ${index}`,
+    url: `https://bookmark.example.test/${index}`, url2: index % 2 === 0 ? `https://alternate.example.test/${index}` : null, categoryId: index ? 'child' : 'category' }));
+  await context.route('**/api/v1/categories/tree', route => route.fulfill({ json: [{ id: 'category', name: '测试分类', path: '测试分类', count: 101, children: [
+    { id: 'child', name: '子分类', path: '测试分类 / 子分类', count: 100, children: [] },
+  ] }] }));
+  const categoryPages: string[] = [];
+  await context.route('**/api/v1/bookmarks**', route => {
+    const url = new URL(route.request().url());
+    if (!url.pathname.endsWith('/bookmarks')) return route.fallback();
+    const page = Number(url.searchParams.get('page') || 1), pageSize = Number(url.searchParams.get('pageSize') || 50);
+    if (url.searchParams.get('includeDescendants') === 'true') categoryPages.push(url.searchParams.get('page')!);
+    return route.fulfill({ json: { items: all.slice((page - 1) * pageSize, page * pageSize), total: all.length, page, pageSize } });
+  });
+  await page.addInitScript(() => {
+    const opened: { url: string; opener: Window | null; location: { replace: (url: string) => void } }[] = [];
+    (window as unknown as { openedBookmarks: typeof opened }).openedBookmarks = opened;
+    window.open = () => {
+      const tab = { url: '', opener: window as Window | null, location: { replace: (url: string) => { tab.url = url; } } };
+      opened.push(tab); return tab as unknown as Window;
+    };
+  });
+  await page.goto('/bookmarks?categoryId=category&keyword=当前筛选&page=2&pageSize=20');
+  const button = page.getByRole('button', { name: '打开全部书签', exact: true });
+  await expect(button).toBeEnabled();
+  await page.getByRole('combobox', { name: '访问地址' }).selectOption('url2');
+  await button.click();
+  const opened = await page.evaluate(() => (window as unknown as { openedBookmarks: { url: string; opener: Window | null }[] }).openedBookmarks.map(tab => ({ url: tab.url, isolated: tab.opener === null })));
+  expect(opened).toHaveLength(101);
+  expect(opened[0].url).toBe('https://alternate.example.test/0');
+  expect(opened[1].url).toBe('https://bookmark.example.test/1');
+  expect(opened[100].url).toBe('https://alternate.example.test/100');
+  expect(opened.every(tab => tab.isolated)).toBe(true);
+  expect(categoryPages).toEqual(['1', '2']);
 });
 
 test('首页搜索按钮的文字和箭头在同一行居中', async ({ page }, info) => {

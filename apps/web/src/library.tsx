@@ -5,11 +5,11 @@ import { toast } from 'sonner';
 import { Button, Empty, Icon, Loading, PrivateMark, QueryError, SiteIcon } from './components';
 import { useApp, errorMessage } from './state';
 import { StaleSessionError } from './api';
-import { domain, type Bookmark, type Impact, type Operation, type Page } from './types';
+import { domain, resolveBookmarkUrl, type AddressMode, type Bookmark, type Impact, type Operation, type Page } from './types';
 
 export function VisitLink({ book, className = '', children }: { book: Bookmark; className?: string; children: React.ReactNode }) {
   const app = useApp();
-  return <a className={className} href={book.url} target="_blank" rel="noopener noreferrer" onClick={() => {
+  return <a className={className} href={resolveBookmarkUrl(book, app.addressMode)} target="_blank" rel="noopener noreferrer" onClick={() => {
     if (app.identity.authenticated) void app.call(`/bookmarks/${book.id}/visits`, { method: 'POST' }).catch(() => {});
   }}>{children}</a>;
 }
@@ -55,7 +55,7 @@ export function LibraryPage() {
     for (const book of books) {
       const tab = window.open('about:blank', '_blank');
       if (!tab) { toast.error(`浏览器拦截了批量打开（已打开 ${opened}/${books.length}），请允许本站弹出窗口后重试`); break; }
-      tab.opener = null; tab.location.replace(book.url); opened++;
+      tab.opener = null; tab.location.replace(resolveBookmarkUrl(book, app.addressMode)); opened++;
       if (app.identity.authenticated) void app.call(`/bookmarks/${book.id}/visits`, { method: 'POST' }).catch(() => {});
     }
   };
@@ -122,6 +122,7 @@ export function LibraryPage() {
     <div className="library-toolbar"><label className="field-search"><Icon name="search" /><input id="library-search" aria-label="搜索书签" placeholder="搜索书签名称、域名、标签或路径…" value={params.get('keyword') || ''} onChange={event => changeFilter('keyword', event.target.value)} /></label>
       <Button className={showFilters ? 'soft' : ''} onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}><Icon name="filter" />筛选</Button>
       <select className="control-select" aria-label="排序" value={sortValue} onChange={event => changeFilter('sort', event.target.value)}><option value="newest">最近添加</option><option value="oldest">最早添加</option><option value="frequent">访问最多</option><option value="title">名称 A-Z</option></select>
+      <label className="address-control">访问地址<select className="control-select" aria-label="访问地址" value={app.addressMode} onChange={event => app.updateAddressMode(event.target.value as AddressMode)}><option value="url">地址</option><option value="url2">地址2</option></select></label>
       <div className="view-control"><button className={app.preferences.defaultView === 'list' ? 'active' : ''} title="紧凑列表" aria-label="紧凑列表" aria-pressed={app.preferences.defaultView === 'list'} onClick={() => void app.updatePreferences({ defaultView: 'list' })}><Icon name="list" /></button><button className={app.preferences.defaultView === 'grid' ? 'active' : ''} title="紧凑卡片" aria-label="紧凑卡片" aria-pressed={app.preferences.defaultView === 'grid'} onClick={() => void app.updatePreferences({ defaultView: 'grid' })}><Icon name="grid" /></button></div>
       {app.identity.authenticated && <>
         <Button disabled={app.startingIcons} onClick={() => void app.startIconRefresh()}>刷新全库图标</Button>
@@ -146,11 +147,11 @@ export function LibraryPage() {
         {query.data.items.map(book => <div className={`bookmark-row ${selected.includes(book.id) ? 'row-selected' : ''}`} key={book.id}>
           {selectionEnabled && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
           <VisitLink book={book} className="bookmark-primary bookmark-surface-link"><SiteIcon title={book.title} url={book.url} bookmarkId={book.id} /><span className="bookmark-name"><strong title={book.title}>{book.title} <PrivateMark value={book.effectivePrivate} /></strong></span></VisitLink>
-          <VisitLink book={book} className="bookmark-url truncate">{domain(book.url)}</VisitLink>
+          <VisitLink book={book} className="bookmark-url truncate">{domain(resolveBookmarkUrl(book, app.addressMode))}</VisitLink>
           <span className="bookmark-category truncate" title={book.categoryPath}>{book.categoryPath}</span><span className="bookmark-tags">{book.tags.slice(0, 2).map(tag => <span className="tiny-tag" key={tag}>{tag}</span>)}</span><span className="bookmark-date">{book.createdAt.slice(0, 10)}</span>{rowActions(book)}
         </div>)}</div> : <div className="tile-grid">{query.data.items.map(book => <div className={`bookmark-tile ${selected.includes(book.id) ? 'row-selected' : ''}`} key={book.id}><div className="tile-top">
           {selectionEnabled && <input className="select-bookmark" type="checkbox" aria-label={`选择 ${book.title}`} checked={selected.includes(book.id)} onChange={() => toggle(book.id)} />}
-          <SiteIcon title={book.title} url={book.url} bookmarkId={book.id} /><div className="tile-name"><VisitLink book={book} className="bookmark-surface-link"><span className="truncate">{book.title} <PrivateMark value={book.effectivePrivate} /></span></VisitLink><div className="tile-domain truncate">{domain(book.url)}</div></div>{rowActions(book)}</div><div className="tile-bottom"><span title={book.categoryPath}>{book.categoryPath}</span>{book.isFavorite && <Icon name="star" />}</div></div>)}</div>}
+          <SiteIcon title={book.title} url={book.url} bookmarkId={book.id} /><div className="tile-name"><VisitLink book={book} className="bookmark-surface-link"><span className="truncate">{book.title} <PrivateMark value={book.effectivePrivate} /></span></VisitLink><div className="tile-domain truncate">{domain(resolveBookmarkUrl(book, app.addressMode))}</div></div>{rowActions(book)}</div><div className="tile-bottom"><span title={book.categoryPath}>{book.categoryPath}</span>{book.isFavorite && <Icon name="star" />}</div></div>)}</div>}
       <div className="pagination"><span>共 {query.data.total} 条 · 第 {query.data.page} / {Math.max(1, Math.ceil(query.data.total / query.data.pageSize))} 页</span><select className="control-select" aria-label="每页数量" value={query.data.pageSize} onChange={event => changeFilter('pageSize', event.target.value)}>{[20, 50, 100].map(size => <option value={size} key={size}>{size} 条/页</option>)}</select>
         <Button disabled={query.data.page <= 1} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(query.data.page - 1)); setParams(next); }}>上一页</Button><Button disabled={query.data.page * query.data.pageSize >= query.data.total} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(query.data.page + 1)); setParams(next); }}>下一页</Button></div>
     </>}

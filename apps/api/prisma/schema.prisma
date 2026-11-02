@@ -59,6 +59,7 @@ model Bookmark {
   categoryId    String?  @map("category_id") @db.Uuid
   title         String   @db.VarChar(200)
   url           String   @db.VarChar(4096)
+  url2          String?  @db.VarChar(4096)
   description   String   @default("") @db.VarChar(1000)
   notes         String   @default("")
   isPrivate     Boolean  @default(false) @map("is_private")

@@ -1,5 +1,5 @@
 -- Linkora 全量初始化 SQL（PostgreSQL 16+）
--- 最新迁移：202611010001_bookmark_icons
+-- 最新迁移：202611020001_secondary_url
 -- 仅用于空数据库；包含当前全部业务表、枚举、索引及约束。
 -- 不插入账号或演示数据；Prisma 迁移登记步骤见本目录 README.md。
 
@@ -48,6 +48,7 @@ CREATE TABLE "bookmarks" (
     "category_id" UUID,
     "title" VARCHAR(200) NOT NULL,
     "url" VARCHAR(4096) NOT NULL,
+    "url2" VARCHAR(4096),
     "description" VARCHAR(1000) NOT NULL DEFAULT '',
     "notes" TEXT NOT NULL DEFAULT '',
     "is_private" BOOLEAN NOT NULL DEFAULT false,

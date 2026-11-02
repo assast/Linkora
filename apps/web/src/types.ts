@@ -4,7 +4,7 @@ export interface Category {
   inheritedPrivate: boolean; sortOrder: number; path: string; count: number; children: Category[];
 }
 export interface Bookmark {
-  id: string; title: string; url: string; description: string; notes: string; categoryId: string | null;
+  id: string; title: string; url: string; url2: string | null; description: string; notes: string; categoryId: string | null;
   categoryPath: string; tags: string[]; isPrivate: boolean; effectivePrivate: boolean; inheritedPrivate: boolean;
   isFavorite: boolean; visitCount: number; createdAt: string; updatedAt: string;
 }
@@ -24,6 +24,11 @@ export interface Impact {
   summary: { id: string; title: string; isPrivate: boolean; willBePrivate: boolean }[];
 }
 export type Operation = 'MOVE_CATEGORY' | 'ADD_TAGS' | 'REMOVE_TAGS' | 'REPLACE_TAGS' | 'SET_FAVORITE' | 'SET_PRIVACY' | 'DELETE' | 'EXPORT';
+export type AddressMode = 'url' | 'url2';
+export function resolveBookmarkUrl(book: { url: string; url2?: string | null }, mode: AddressMode) {
+  const alternative = book.url2?.trim();
+  return mode === 'url2' && alternative ? alternative : book.url;
+}
 export const flattenCategories = (nodes: Category[]): Category[] => nodes.flatMap(node => [node, ...flattenCategories(node.children)]);
 export const domain = (value: string) => { try { return new URL(value).hostname.replace(/^www\./, ''); } catch { return 'example.com'; } };
 export const defaults: Preferences = { theme: 'light', defaultEngine: 'google', defaultView: 'grid', expandedCategories: [] };

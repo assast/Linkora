@@ -10,13 +10,13 @@ export interface CategoryView {
   inheritedPrivate: boolean; sortOrder: number; path: string; count: number; children: CategoryView[];
 }
 export interface BookmarkView {
-  id: string; categoryId: string | null; title: string; url: string; description: string; notes: string;
+  id: string; categoryId: string | null; title: string; url: string; url2: string | null; description: string; notes: string;
   isPrivate: boolean; isFavorite: boolean; effectivePrivate: boolean; inheritedPrivate: boolean;
   visitCount: number; createdAt: Date; updatedAt: Date; lastVisitedAt: Date | null; categoryPath: string; tags: string[];
 }
 
 const BOOKMARK_FIELDS = Prisma.sql`
-  b.id, b.title, b.url, b.description, b.notes, b.category_id AS "categoryId",
+  b.id, b.title, b.url, b.url2, b.description, b.notes, b.category_id AS "categoryId",
   b.is_private AS "isPrivate", b.is_favorite AS "isFavorite", b.effective_private AS "effectivePrivate",
   b.inherited_private AS "inheritedPrivate", b.visit_count AS "visitCount", b.created_at AS "createdAt",
   b.updated_at AS "updatedAt", b.last_visited_at AS "lastVisitedAt", b.category_path AS "categoryPath",

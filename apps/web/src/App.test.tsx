@@ -8,7 +8,7 @@ import App from './App';
 import { AppProvider } from './state';
 import { defaults, type Bookmark, type Category, type BookmarkIconConfig } from './types';
 
-const book: Bookmark = { id: 'book-1', title: '测试书签', url: 'https://example.test/one', description: '', notes: '',
+const book: Bookmark = { id: 'book-1', title: '测试书签', url: 'https://example.test/one', url2: null, description: '', notes: '',
   categoryId: null, categoryPath: '未分类', tags: [], isPrivate: false, effectivePrivate: false, inheritedPrivate: false,
   isFavorite: false, visitCount: 0, createdAt: '2026-10-31', updatedAt: '2026-10-31' };
 let authenticated = false;
@@ -30,7 +30,16 @@ beforeEach(() => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname.replace('/api/v1', '');
     const page = Number(url.searchParams.get('page') || 1), pageSize = Number(url.searchParams.get('pageSize') || 50);
-    if (path === `/bookmarks/${book.id}`) return Response.json(book);
+    const detail = books.find(item => path === `/bookmarks/${item.id}`);
+    if (detail) {
+      if (init?.method === 'PATCH') Object.assign(detail, JSON.parse(init.body as string));
+      return Response.json(detail);
+    }
+    if (path.endsWith('/preview')) return Response.json({ revision: 0, becomingPublicBookmarks: 0, becomingPublicCategories: 0 });
+    if (path === '/bookmarks' && init?.method === 'POST') {
+      const created = { ...book, ...JSON.parse(init.body as string), id: 'created-book' };
+      books.push(created); return Response.json(created);
+    }
     if (path === `/bookmarks/${book.id}/icon-config`) {
       if (init?.method === 'PATCH') {
         const body = JSON.parse(init.body as string);
@@ -51,7 +60,7 @@ beforeEach(() => {
     const data = path === '/auth/me' ? (authenticated ? { authenticated: true, owner: { id: 'owner-1', email: 'owner@example.test' } } : { authenticated: false })
       : path === '/auth/logout' ? (authenticated = false, {})
       : path === '/categories/tree' ? categories : path === '/tags' ? []
-      : path === '/home' ? { frequent: [], recent: [], counts: { bookmarks: 1, categories: 0, favorites: 0 } }
+      : path === '/home' ? { frequent: books.filter(item => item.isFavorite).slice(0, 10), recent: books.slice(0, 7), counts: { bookmarks: books.length, categories: 0, favorites: 0 } }
       : path === '/preferences' ? { ...defaults, defaultView: 'list', ...(init?.body ? JSON.parse(init.body as string) : {}) }
       : { items: books.slice((page - 1) * pageSize, page * pageSize), total: books.length, page, pageSize };
     return Response.json(data, { status: path === '/preferences' && init?.method === 'PATCH' && failPreferences ? 503 : 200 });
@@ -190,14 +199,155 @@ describe('书签视图的浏览器记忆', () => {
   });
 });
 
+describe('书签地址2与统一切换', () => {
+  beforeEach(() => {
+    books = [{ ...book, title: '双地址书签', url2: 'https://alternate.test/path', isFavorite: true },
+      { ...book, id: 'single-book', title: '单地址书签' }];
+  });
+
+  it('列表和卡片共用模式，单地址书签反复切换都使用原地址', async () => {
+    renderApp();
+    const mode = await screen.findByRole('combobox', { name: '访问地址' });
+    expect(mode).toHaveValue('url');
+    await screen.findByRole('link', { name: '双地址书签' });
+    for (const view of ['紧凑列表', '紧凑卡片']) {
+      await userEvent.click(screen.getByRole('button', { name: view }));
+      for (const value of ['url2', 'url', 'url2']) {
+        await userEvent.selectOptions(mode, value);
+        const double = screen.getByRole('link', { name: '双地址书签' });
+        expect(double).toHaveAttribute('href', value === 'url2' ? 'https://alternate.test/path' : book.url);
+        expect(double.closest('.bookmark-row, .bookmark-tile')).toHaveTextContent(value === 'url2' ? 'alternate.test' : 'example.test');
+        expect(screen.getByRole('link', { name: '单地址书签' })).toHaveAttribute('href', book.url);
+      }
+    }
+    await userEvent.click(screen.getByRole('link', { name: '双地址书签' }));
+    expect(vi.mocked(fetch).mock.calls.some(call => call[1]?.method !== 'GET')).toBe(false);
+  });
+
+  it('切换不改变当前页、筛选、排序、多选或触发写请求', async () => {
+    authenticated = true;
+    renderApp('/bookmarks?keyword=保留关键词&sort=title&page=2&pageSize=1');
+    await userEvent.click(await screen.findByRole('button', { name: '多选' }));
+    const selection = await screen.findByRole('checkbox', { name: '选择 单地址书签' });
+    await userEvent.click(selection);
+    const requests = vi.mocked(fetch).mock.calls.length;
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '访问地址' }), 'url2');
+    expect(selection).toBeChecked();
+    expect(screen.getByLabelText('搜索书签')).toHaveValue('保留关键词');
+    expect(screen.getByLabelText('排序')).toHaveValue('title');
+    expect(screen.getByText(/第 2 \/ 2 页/)).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.slice(requests).some(call => call[1]?.method !== 'GET')).toBe(false);
+    expect(localStorage.getItem('linkora.bookmark.addressMode')).toBe('url2');
+  });
+
+  it('导航和刷新记住模式，首页链接及域名跟随选择', async () => {
+    const app = renderApp();
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: '访问地址' }), 'url2');
+    await userEvent.click(screen.getByRole('button', { name: '导航首页' }));
+    const homeLinks = await screen.findAllByRole('link', { name: /双地址书签/ });
+    expect(homeLinks).toHaveLength(2);
+    for (const link of homeLinks) {
+      expect(link).toHaveAttribute('href', 'https://alternate.test/path');
+      expect(link).toHaveTextContent('alternate.test');
+    }
+    app.unmount(); renderApp();
+    expect(await screen.findByRole('combobox', { name: '访问地址' })).toHaveValue('url2');
+    expect(await screen.findByRole('link', { name: '双地址书签' })).toHaveAttribute('href', 'https://alternate.test/path');
+  });
+
+  it('登录和退出后保留设备的地址选择', async () => {
+    renderApp();
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: '访问地址' }), 'url2');
+    authenticated = true; window.dispatchEvent(new Event('focus'));
+    await userEvent.click(await screen.findByRole('button', { name: '已登录' }));
+    await userEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    await userEvent.click(screen.getByRole('button', { name: /^全部书签/ }));
+    expect(await screen.findByRole('combobox', { name: '访问地址' })).toHaveValue('url2');
+  });
+
+  it('非法的本地模式使用原地址', async () => {
+    localStorage.setItem('linkora.bookmark.addressMode', 'unknown'); renderApp();
+    expect(await screen.findByRole('combobox', { name: '访问地址' })).toHaveValue('url');
+    expect(await screen.findByRole('link', { name: '双地址书签' })).toHaveAttribute('href', book.url);
+  });
+
+  it('浏览器禁止读写本地存储时仍可切换', async () => {
+    for (const method of ['getItem', 'setItem'] as const) vi.spyOn(Storage.prototype, method).mockImplementation(() => { throw new DOMException('禁用存储', 'SecurityError'); });
+    renderApp();
+    await screen.findByRole('link', { name: '双地址书签' });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '访问地址' }), 'url2');
+    expect(screen.getByRole('link', { name: '双地址书签' })).toHaveAttribute('href', 'https://alternate.test/path');
+  });
+
+  it.each(['', 'https://new-alternate.test/path'])('新增书签的地址2可选并保存：%s', async url2 => {
+    authenticated = true; renderApp('/bookmarks/new');
+    await userEvent.type(await screen.findByLabelText('书签名称', { exact: false }), '新建书签');
+    await userEvent.type(screen.getByLabelText('网站地址', { exact: false }), 'https://new-primary.test/');
+    const input = screen.getByLabelText('地址2（可选）');
+    expect(input).not.toBeRequired();
+    if (url2) await userEvent.type(input, url2);
+    await userEvent.click(screen.getByRole('button', { name: '保存书签' }));
+    await screen.findByRole('heading', { name: '书签详情 / 编辑' });
+    const request = vi.mocked(fetch).mock.calls.find(call => call[0] === '/api/v1/bookmarks' && call[1]?.method === 'POST')!;
+    expect(JSON.parse(request[1]!.body as string)).toMatchObject({ url: 'https://new-primary.test/', url2: url2 || null });
+    expect(screen.getByLabelText('地址2（可选）')).toHaveValue(url2);
+  });
+
+  it('编辑页使用已保存的地址2，清空保存后自动回退', async () => {
+    authenticated = true; localStorage.setItem('linkora.bookmark.addressMode', 'url2');
+    renderApp(`/bookmarks/${book.id}/edit`);
+    const input = await screen.findByLabelText('地址2（可选）');
+    expect(input).toHaveValue('https://alternate.test/path');
+    expect(screen.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', 'https://alternate.test/path');
+    await userEvent.clear(input);
+    expect(screen.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', 'https://alternate.test/path');
+    await userEvent.click(screen.getByRole('button', { name: '保存修改' }));
+    await waitFor(() => expect(screen.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', book.url));
+    expect(books[0].url2).toBeNull();
+    expect(localStorage.getItem('linkora.bookmark.addressMode')).toBe('url2');
+    await userEvent.click(screen.getByRole('button', { name: '返回书签库' }));
+    expect(await screen.findByRole('link', { name: '双地址书签' })).toHaveAttribute('href', book.url);
+  });
+
+  it('保存失败保留两个地址的输入并展示错误', async () => {
+    authenticated = true;
+    const previous = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => init?.method === 'PATCH' && String(input).endsWith(`/bookmarks/${book.id}`)
+      ? Promise.resolve(Response.json({ message: '暂时无法保存' }, { status: 503 })) : previous(input, init));
+    const success = vi.spyOn(toast, 'success');
+    renderApp(`/bookmarks/${book.id}/edit`);
+    const input = await screen.findByLabelText('地址2（可选）');
+    await userEvent.clear(input); await userEvent.type(input, 'https://unsaved.test/');
+    await userEvent.click(screen.getByRole('button', { name: '保存修改' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('暂时无法保存');
+    expect(input).toHaveValue('https://unsaved.test/');
+    expect(screen.getByLabelText('网站地址', { exact: false })).toHaveValue(book.url);
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it('所有者打开地址2按原书签记录，记录失败不移除链接', async () => {
+    authenticated = true; localStorage.setItem('linkora.bookmark.addressMode', 'url2');
+    const previous = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).endsWith('/visits')
+      ? Promise.resolve(Response.json({ message: '记录失败' }, { status: 503 })) : previous(input, init));
+    renderApp();
+    const link = await screen.findByRole('link', { name: '双地址书签' });
+    await userEvent.click(link);
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/v1/bookmarks/${book.id}/visits`, expect.objectContaining({ method: 'POST' })));
+    expect(link).toHaveAttribute('href', 'https://alternate.test/path');
+    expect(link).toHaveAttribute('target', '_blank'); expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+});
+
 describe('分类打开全部书签', () => {
   beforeEach(() => {
     categories = [{ id: 'category-1', name: '测试分类', parentId: null, isPrivate: false, effectivePrivate: false,
       inheritedPrivate: false, sortOrder: 0, path: '测试分类', count: 101, children: [] }];
-    books = Array.from({ length: 101 }, (_, i) => ({ ...book, id: `book-${i}`, title: `书签 ${i}`, url: `https://example.test/${i}`, categoryId: 'category-1' }));
+    books = Array.from({ length: 101 }, (_, i) => ({ ...book, id: `book-${i}`, title: `书签 ${i}`, url: `https://example.test/${i}`, url2: i % 2 === 0 ? `https://alternate.test/${i}` : null, categoryId: 'category-1' }));
   });
 
-  it('跨分页读取完整分类，不沿用当前列表的搜索、页码和星标筛选', async () => {
+  it.each(['url', 'url2'])('跨分页读取完整分类并使用当前地址模式：%s', async mode => {
+    localStorage.setItem('linkora.bookmark.addressMode', mode);
     const open = vi.spyOn(window, 'open').mockImplementation(() => ({ opener: window, location: { replace: vi.fn() } }) as unknown as Window);
     renderApp('/bookmarks?categoryId=category-1&keyword=其他&favorite=true&page=2&pageSize=20');
     const button = await screen.findByRole('button', { name: '打开全部书签' });
@@ -212,7 +362,9 @@ describe('分类打开全部书签', () => {
       expect(params.get('categoryId')).toBe('category-1');
       expect(params.has('keyword') || params.has('favorite')).toBe(false);
     }
-    expect(open.mock.results[100].value.location.replace).toHaveBeenCalledWith('https://example.test/100');
+    expect(open.mock.results[0].value.location.replace).toHaveBeenCalledWith(mode === 'url2' ? 'https://alternate.test/0' : 'https://example.test/0');
+    expect(open.mock.results[1].value.location.replace).toHaveBeenCalledWith('https://example.test/1');
+    expect(open.mock.results[100].value.location.replace).toHaveBeenCalledWith(mode === 'url2' ? 'https://alternate.test/100' : 'https://example.test/100');
     expect(open.mock.results[100].value.opener).toBeNull();
     open.mockRestore();
   });

@@ -3,6 +3,66 @@ import { origin, ownerApi, loginPage } from './helpers';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
+test('地址2真实表单保存、统一访问、星标分类与清空回退', async ({ page, request, context }, info) => {
+  const call = await ownerApi(request);
+  const suffix = 'dual-' + randomUUID().slice(0, 8);
+  const ids: string[] = [];
+  let categoryId: string | undefined;
+  const primary = 'https://primary.example.test/' + suffix, alternate = 'http://internal_service:8080/' + suffix;
+  await context.route('**/api/v1/bookmarks/*/icon', route => route.fulfill({ status: 204 }));
+  try {
+    const category = await call('POST', '/categories', { name: suffix });
+    expect(category.ok()).toBeTruthy(); categoryId = (await category.json()).id;
+    const single = await call('POST', '/bookmarks', { title: '单地址 ' + suffix, url: primary, categoryId });
+    expect(single.ok()).toBeTruthy(); ids.push((await single.json()).id);
+    await page.goto('/bookmarks'); await loginPage(page);
+    await page.goto('/bookmarks/new');
+    await page.getByLabel('书签名称').fill('双地址 ' + suffix);
+    await page.getByLabel('网站地址').fill(primary);
+    await page.getByLabel('地址2（可选）').fill(alternate);
+    await page.getByLabel('所在分类').selectOption(categoryId!);
+    await page.getByRole('checkbox', { name: /设为星标书签/ }).check();
+    await page.getByRole('button', { name: '保存书签', exact: true }).click();
+    await expect(page).toHaveURL(/\/bookmarks\/[a-f0-9-]+\/edit$/);
+    const doubleId = page.url().split('/').at(-2)!; ids.push(doubleId);
+    await expect(page.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', primary);
+    await page.goto('/bookmarks?keyword=' + suffix);
+    const mode = page.getByRole('combobox', { name: '访问地址' });
+    await mode.selectOption('url2');
+    await expect(page.getByRole('link', { name: '双地址 ' + suffix, exact: true })).toHaveAttribute('href', alternate);
+    await expect(page.getByRole('link', { name: '单地址 ' + suffix, exact: true })).toHaveAttribute('href', primary);
+    const saved = await (await call('GET', '/bookmarks/' + doubleId)).json();
+    expect(saved.url).toBe(primary); expect(saved.url2).toBe(alternate); expect(saved.visitCount).toBe(0);
+    await page.reload(); await expect(mode).toHaveValue('url2');
+    await page.goto('/bookmarks?filter=starred&keyword=' + suffix);
+    await expect(page.getByRole('link', { name: '双地址 ' + suffix, exact: true })).toHaveAttribute('href', alternate);
+    await expect(page.getByRole('link', { name: '单地址 ' + suffix, exact: true })).toHaveCount(0);
+    await page.goto('/bookmarks?categoryId=' + categoryId);
+    await expect(page.locator('.bookmark-tile')).toHaveCount(2);
+    await expect(mode).toHaveValue('url2');
+    await page.goto('/home');
+    await expect(page.locator('.quick-item').filter({ hasText: '双地址 ' + suffix })).toHaveAttribute('href', alternate);
+    await page.goto(`/bookmarks/${doubleId}/edit`);
+    await expect(page.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', alternate);
+    await expect(page.getByLabel('地址2（可选）')).toHaveValue(alternate);
+    await page.screenshot({ path: info.outputPath('secondary-url-editor.png') });
+    const update = page.waitForResponse(response => response.url().endsWith('/bookmarks/' + doubleId) && response.request().method() === 'PATCH');
+    await page.getByLabel('地址2（可选）').fill('');
+    await page.getByRole('button', { name: '保存修改', exact: true }).click();
+    expect((await update).ok()).toBe(true);
+    await expect(page.getByRole('link', { name: '访问网站' })).toHaveAttribute('href', primary);
+    await page.reload(); await expect(page.getByLabel('地址2（可选）')).toHaveValue('');
+    await page.goto('/bookmarks?keyword=' + suffix);
+    await expect(mode).toHaveValue('url2');
+    await expect(page.getByRole('link', { name: '双地址 ' + suffix, exact: true })).toHaveAttribute('href', primary);
+    await expect(page.getByRole('link', { name: '单地址 ' + suffix, exact: true })).toHaveAttribute('href', primary);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally {
+    for (const id of ids) await call('DELETE', '/bookmarks/' + id);
+    if (categoryId) await call('DELETE', '/categories/' + categoryId);
+  }
+});
+
 test('访客搜索、登录融合、退出清理与响应式', async ({ page, request, context }, info) => {
   const call = await ownerApi(request);
   const suffix = 'e2e-' + randomUUID().slice(0, 8);

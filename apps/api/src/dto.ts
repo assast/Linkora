@@ -5,6 +5,7 @@ import { ApiProperty, IntersectionType, PartialType } from '@nestjs/swagger';
 const optional = (_: unknown, value: unknown) => value !== undefined;
 const trim = ({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value;
 const queryBoolean = ({ value }: { value: unknown }) => value === 'true' ? true : value === 'false' ? false : value;
+const bookmarkUrlOptions = { protocols: ['http', 'https'], require_protocol: true, require_tld: false, allow_underscores: true, max_allowed_length: 4096 };
 
 export function normalizeTags(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
@@ -48,7 +49,10 @@ export class CategoryReorderDto {
 
 export class BookmarkDto {
   @ApiProperty({ maxLength: 200 }) @Transform(trim) @IsString() @MinLength(1) @MaxLength(200) title!: string;
-  @ApiProperty({ maxLength: 4096 }) @Transform(trim) @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false, allow_underscores: true }) @MaxLength(4096) url!: string;
+  @ApiProperty({ maxLength: 4096 }) @Transform(trim) @IsUrl(bookmarkUrlOptions) @MaxLength(4096) url!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 4096 })
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
+  @ValidateIf((_, value) => value !== undefined && value !== null) @IsUrl(bookmarkUrlOptions) @MaxLength(4096) url2?: string | null;
   @ApiProperty({ required: false, nullable: true }) @ValidateIf((_, v) => v !== undefined && v !== null) @IsUUID() categoryId?: string | null;
   @ApiProperty({ required: false }) @ValidateIf(optional) @IsString() @MaxLength(1000) description?: string;
   @ApiProperty({ required: false }) @ValidateIf(optional) @IsString() @MaxLength(10000) notes?: string;

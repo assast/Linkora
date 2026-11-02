@@ -3,11 +3,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, ApiError, resetRequests, StaleSessionError, type RequestOptions } from './api';
-import { defaults, flattenCategories, type Category, type Home, type Identity, type Impact, type Preferences, type IconRefreshJob } from './types';
+import { defaults, flattenCategories, type AddressMode, type Category, type Home, type Identity, type Impact, type Preferences, type IconRefreshJob } from './types';
 import { IconGeneration } from './icon-generation';
 
 export interface ConfirmOptions { title: string; description: string; impact?: Impact; label?: string; danger?: boolean }
 export type ActiveDialog = null | { kind: 'login' | 'account' | 'manager' } | { kind: 'category'; category?: Category; parentId?: string | null };
+const addressModeKey = 'linkora.bookmark.addressMode';
+
+function storedAddressMode(): AddressMode {
+  try { return localStorage.getItem(addressModeKey) === 'url2' ? 'url2' : 'url'; }
+  catch { return 'url'; }
+}
 
 function guestPreferences(): Preferences {
   try {
@@ -19,6 +25,11 @@ function guestPreferences(): Preferences {
 }
 
 function useAppState() {
+  const [addressMode, setAddressMode] = useState(storedAddressMode);
+  const updateAddressMode = (mode: AddressMode) => {
+    setAddressMode(mode);
+    try { localStorage.setItem(addressModeKey, mode); } catch { /* 禁用存储时仍允许切换访问地址。 */ }
+  };
   const client = useQueryClient();
   const navigate = useNavigate();
   const previousScope = useRef<string | null>(null);
@@ -146,7 +157,7 @@ function useAppState() {
       description: '此修改会让部分内容对访客可见，请核对影响范围。', impact, label: '确认修改并公开', danger: true })) return null;
     return call<T>(`/${resource}/${id}`, { method: 'PATCH', body: { ...(payload as object), expectedRevision: impact.revision, confirmedPublic: true } });
   };
-  return { identity, identityQuery, scope, ready, call, iconGeneration, reloadIcons, iconJob: iconJobId ? iconJobQuery.data : undefined,
+  return { identity, identityQuery, scope, ready, call, addressMode, updateAddressMode, iconGeneration, reloadIcons, iconJob: iconJobId ? iconJobQuery.data : undefined,
     iconJobId, startingIcons, startIconRefresh, dismissIconJob: () => setIconTask(null), categoriesQuery, categories: categoriesQuery.data || [],
     flatCategories: flattenCategories(categoriesQuery.data || []), homeQuery, tagsQuery, preferences,
     updatePreferences, refresh, login, logout, dialog, confirmation, setDialog, closeDialog, confirm, openLogin, openCategory, openManager, addBookmark, saveWithPreview };

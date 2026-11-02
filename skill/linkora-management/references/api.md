@@ -38,7 +38,7 @@
 | `POST /categories/:id/preview` | 与 PATCH 相同的变更字段，只读预览 |
 | `PATCH /categories/:id` | 只传需变更字段；公开变化带修订号和确认 |
 | `DELETE /categories/:id` | 只能删除空分类；无请求体 |
-| `POST /bookmarks` | `{title,url,categoryId,description,notes,tags,isPrivate,isFavorite}` |
+| `POST /bookmarks` | `{title,url,url2,categoryId,description,notes,tags,isPrivate,isFavorite}`，`url2` 可选 |
 | `POST /bookmarks/:id/preview` | 与 PATCH 相同的变更字段，只读预览 |
 | `PATCH /bookmarks/:id` | 只传需变更字段；公开变化带修订号和确认 |
 | `DELETE /bookmarks/:id` | 永久删除，无请求体；事先核对用户授权 |
@@ -46,6 +46,8 @@
 | `PATCH /preferences` | `theme=light|dark`、`defaultEngine=google|bing|baidu|duck|github`、`defaultView=list|grid`、`expandedCategories`（UUID 数组） |
 
 `parentId:null` 表示根分类，`categoryId:null` 表示未分类。分类名最多 40、标题 200、URL 4096、简介 1000、备注 10000 字符。URL 必须为绝对 HTTP/HTTPS，可保存内网地址；服务端不抓取网页。标签为字符串数组，最多 20 个，每个 40 字符；去首尾空格、去空、忽略大小写去重。
+
+地址2使用可选字段 `url2`，与 `url` 共用 HTTP/HTTPS 和 4096 字符校验。新增时可省略；PATCH 省略时保留原值，显式传 `null`、空字符串或纯空白时清空，非空地址会去除首尾空白。保存和查询响应（含列表、详情与首页）始终返回 `url2`，未配置为 `null`。两个地址共用书签可见性，公开书签的地址2同样对访客可读。前端“访问地址”仅是当前浏览器记忆的访问偏好，不属于 `/preferences` 字段，也不修改两个保存值。
 
 请求 JSON 写入临时文件，通过 `--body-file` 传入，不在 shell 中拼接：
 
@@ -92,6 +94,8 @@ python3 scripts/linkora.py request POST /bookmarks/export --body-file /tmp/linko
 ```
 
 批量修改在一个 PG 事务中全成或全败，无部分成功。导出包含格式版本、时间、选中书签、标签与必要分类祖先，保留原始私密标志；不含账号凭据。JSON 导出只备份选中内容，完整服务恢复仍需 PG 原生备份。
+
+导出继续使用 `formatVersion:1`，每条书签同时包含原始 `url` 和可空的 `url2`，不受前端当前地址选择影响。
 ## 书签图标管理补充接口
 
 图标配置不加入旧书签 CRUD 或 JSON 导出字段。以下路径以 `/api/v1` 为前缀；所有配置/图标库/任务接口均需所有者会话，写请求同时需要 Origin 和 CSRF。只有书签图标 GET 沿用公开书签可访客读取、私密及未知书签 404 的规则。

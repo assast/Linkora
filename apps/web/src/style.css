@@ -101,6 +101,8 @@ input[type=checkbox] { accent-color:var(--primary); }
 .table-url { min-width:0; white-space:nowrap; }
 .select-page-control { display:inline-flex; align-items:center; gap:7px; height:33px; padding:0 9px; border:1px solid var(--border); border-radius:8px; color:var(--muted); font-size:11px; white-space:nowrap; }
 .select-page-control input { width:15px; height:15px; margin:0; accent-color:var(--primary); cursor:pointer; }
+.library-toolbar { flex-wrap:wrap; }
+.address-control { display:flex; align-items:center; gap:6px; white-space:nowrap; color:var(--muted); font-size:11px; }
 @media(max-width:1310px) {
   .with-selection .table-header,.with-selection .bookmark-row { grid-template-columns:23px minmax(195px,2fr) minmax(125px,1.2fr) minmax(100px,.9fr) 75px 55px; }
   .with-selection .table-header>.table-url,.with-selection .bookmark-row>.bookmark-url,.with-selection .table-header>.bookmark-category,.with-selection .bookmark-row>.bookmark-category { display:block; }
