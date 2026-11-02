@@ -90,8 +90,10 @@ export class HomeModule {}
 @Controller('preferences')
 class PreferencesController {
   constructor(private readonly db: Database) {}
-  private fields(value: { theme: string; defaultEngine: string; defaultView: string; expandedCategories: string[] }) {
-    return { theme: value.theme, defaultEngine: value.defaultEngine, defaultView: value.defaultView, expandedCategories: value.expandedCategories };
+  private fields(value: { theme: string; defaultEngine: string; defaultView: string; expandedCategories: string[];
+    bookmarkFontSize: number; categoryFontSize: number; showWorkspace: boolean; workspaceItems: string[] }) {
+    return { theme: value.theme, defaultEngine: value.defaultEngine, defaultView: value.defaultView, expandedCategories: value.expandedCategories,
+      bookmarkFontSize: value.bookmarkFontSize, categoryFontSize: value.categoryFontSize, showWorkspace: value.showWorkspace, workspaceItems: value.workspaceItems };
   }
   @Get() async get(@Identity() viewer: Viewer) {
     return this.fields(await this.db.userPreferences.upsert({ where: { userId: viewer.ownerId! }, create: { userId: viewer.ownerId! }, update: {} }));

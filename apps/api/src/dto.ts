@@ -104,4 +104,9 @@ export class PreferencesDto {
   @ApiProperty({ required: false, enum: ['google', 'bing', 'baidu', 'duck', 'github'] }) @ValidateIf(optional) @IsIn(['google', 'bing', 'baidu', 'duck', 'github']) defaultEngine?: string;
   @ApiProperty({ required: false, enum: ['list', 'grid'] }) @ValidateIf(optional) @IsIn(['list', 'grid']) defaultView?: 'list' | 'grid';
   @ApiProperty({ required: false, type: [String] }) @ValidateIf(optional) @IsArray() @ArrayMaxSize(5000) @IsUUID(undefined, { each: true }) expandedCategories?: string[];
+  @ApiProperty({ required: false, minimum: 12, maximum: 20 }) @ValidateIf(optional) @IsInt() @Min(12) @Max(20) bookmarkFontSize?: number;
+  @ApiProperty({ required: false, minimum: 12, maximum: 20 }) @ValidateIf(optional) @IsInt() @Min(12) @Max(20) categoryFontSize?: number;
+  @ApiProperty({ required: false }) @ValidateIf(optional) @IsBoolean() showWorkspace?: boolean;
+  @ApiProperty({ required: false, type: [String], enum: ['home', 'all', 'starred', 'private'] }) @ValidateIf(optional) @IsArray() @ArrayMaxSize(4)
+  @IsIn(['home', 'all', 'starred', 'private'], { each: true }) workspaceItems?: string[];
 }

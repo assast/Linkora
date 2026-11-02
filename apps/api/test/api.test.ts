@@ -336,6 +336,31 @@ describe('真实 PostgreSQL API 业务边界', () => {
     await api().get(prefix + `/bookmarks/${id('github')}`).expect(200);
   });
 
+  test('显示偏好默认兼容旧用户，支持保存字号、导航选择和空导航', async () => {
+    const auth = await login();
+    const initial = (await authorized(api().get(prefix + '/preferences'), auth).expect(200)).body;
+    assert.equal(initial.bookmarkFontSize, 12); assert.equal(initial.categoryFontSize, 12);
+    assert.equal(initial.showWorkspace, true); assert.deepEqual(initial.workspaceItems, ['home', 'all', 'starred', 'private']);
+    const patch = { bookmarkFontSize: 20, categoryFontSize: 16, showWorkspace: false, workspaceItems: ['all', 'private'] };
+    await authorized(api().patch(prefix + '/preferences'), auth).send(patch).expect(200);
+    const saved = (await authorized(api().get(prefix + '/preferences'), auth).expect(200)).body;
+    for (const key of Object.keys(patch) as (keyof typeof patch)[]) assert.deepEqual(saved[key], patch[key]);
+    await authorized(api().patch(prefix + '/preferences'), auth).send({ workspaceItems: [] }).expect(200);
+    assert.deepEqual((await authorized(api().get(prefix + '/preferences'), auth)).body.workspaceItems, []);
+    assert.equal((await db.user.findFirstOrThrow()).contentRevision, 0);
+  });
+
+  test('拒绝无效字号、导航项和开关，不污染已保存偏好', async () => {
+    const auth = await login();
+    for (const patch of [{ bookmarkFontSize: 11 }, { categoryFontSize: 21 }, { bookmarkFontSize: 14.5 },
+      { categoryFontSize: '16' }, { showWorkspace: 'false' }, { workspaceItems: ['unknown'] }, { workspaceItems: null }]) {
+      await authorized(api().patch(prefix + '/preferences'), auth).send(patch).expect(400);
+    }
+    const saved = (await authorized(api().get(prefix + '/preferences'), auth)).body;
+    assert.equal(saved.bookmarkFontSize, 12); assert.equal(saved.categoryFontSize, 12);
+    await api().patch(prefix + '/preferences').send({ showWorkspace: false }).expect(401);
+  });
+
   test('访问计数原子递增，偏好与访问不推进内容修订', async () => {
     const auth = await login();
     await Promise.all([1, 2].map(() => authorized(api().post(prefix + `/bookmarks/${id('github')}/visits`), auth).expect(201)));

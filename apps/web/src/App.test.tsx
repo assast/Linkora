@@ -1,18 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { AppProvider } from './state';
-import { defaults, type Bookmark, type Category, type BookmarkIconConfig } from './types';
+import { defaults, type Bookmark, type Category, type BookmarkIconConfig, type Preferences } from './types';
 
 const book: Bookmark = { id: 'book-1', title: '测试书签', url: 'https://example.test/one', url2: null, description: '', notes: '',
   categoryId: null, categoryPath: '未分类', tags: [], isPrivate: false, effectivePrivate: false, inheritedPrivate: false,
   isFavorite: false, visitCount: 0, createdAt: '2026-10-31', updatedAt: '2026-10-31' };
 let authenticated = false;
 let failPreferences = false;
+let serverPreferences: Preferences;
 let categories: Category[] = [];
 let books = [book];
 let iconConfig: BookmarkIconConfig;
@@ -25,12 +26,17 @@ function renderApp(path = '/bookmarks') {
 
 beforeEach(() => {
   localStorage.clear(); authenticated = false; failPreferences = false; categories = []; books = [book];
+  serverPreferences = { ...defaults, defaultView: 'list' };
   iconConfig = { source: 'auto', version: null, dashboardId: null, iconifyId: null, uploaded: false }; refreshJobState = 'completed';
   vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname.replace('/api/v1', '');
     const page = Number(url.searchParams.get('page') || 1), pageSize = Number(url.searchParams.get('pageSize') || 50);
     const detail = books.find(item => path === `/bookmarks/${item.id}`);
+    if (path === '/preferences') {
+      if (init?.method === 'PATCH' && !failPreferences) Object.assign(serverPreferences, JSON.parse(init.body as string));
+      return Response.json(serverPreferences, { status: init?.method === 'PATCH' && failPreferences ? 503 : 200 });
+    }
     if (detail) {
       if (init?.method === 'PATCH') Object.assign(detail, JSON.parse(init.body as string));
       return Response.json(detail);
@@ -63,9 +69,8 @@ beforeEach(() => {
       : path === '/auth/logout' ? (authenticated = false, {})
       : path === '/categories/tree' ? categories : path === '/tags' ? []
       : path === '/home' ? { frequent: books.filter(item => item.isFavorite).slice(0, 10), recent: books.slice(0, 7), counts: { bookmarks: books.length, categories: 0, favorites: 0 } }
-      : path === '/preferences' ? { ...defaults, defaultView: 'list', ...(init?.body ? JSON.parse(init.body as string) : {}) }
       : { items: books.slice((page - 1) * pageSize, page * pageSize), total: books.length, page, pageSize };
-    return Response.json(data, { status: path === '/preferences' && init?.method === 'PATCH' && failPreferences ? 503 : 200 });
+    return Response.json(data);
   }));
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -197,6 +202,78 @@ describe('书签图标管理界面', () => {
     finish(Response.json({ id: 'job-one', state: 'completed', results: [{ title: '不能泄漏的私密结果' }] }));
     await waitFor(() => expect(screen.queryByLabelText('图标刷新进度')).not.toBeInTheDocument());
     expect(screen.queryByText('不能泄漏的私密结果')).not.toBeInTheDocument();
+  });
+});
+
+describe('显示设置', () => {
+  it('分别保存书签和分类字号、导航项，并在重新打开应用后恢复', async () => {
+    const view = renderApp();
+    await userEvent.click(await screen.findByRole('button', { name: '显示设置' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('书签字号'), { target: { value: '18' } });
+    fireEvent.change(within(dialog).getByLabelText('分类字号'), { target: { value: '16' } });
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: '星标收藏' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.querySelector('.shell')).toHaveStyle({ '--bookmark-font-size': '18px', '--category-font-size': '16px' });
+    expect(within(screen.getByRole('navigation', { name: '工作空间' })).queryByRole('button', { name: /星标收藏/ })).not.toBeInTheDocument();
+    view.unmount(); renderApp();
+    await screen.findByRole('link', { name: '测试书签' });
+    expect(document.querySelector('.shell')).toHaveStyle({ '--bookmark-font-size': '18px', '--category-font-size': '16px' });
+    expect(within(screen.getByRole('navigation', { name: '工作空间' })).queryByRole('button', { name: /星标收藏/ })).not.toBeInTheDocument();
+  });
+
+  it('支持隐藏整个工作空间，保留分类树与设置入口，再开启时保留导航选择', async () => {
+    localStorage.setItem('linkora.guest.preferences', JSON.stringify({ workspaceItems: ['all'] }));
+    renderApp();
+    await userEvent.click(await screen.findByRole('button', { name: '显示设置' }));
+    await userEvent.click(screen.getByRole('switch', { name: '显示工作空间' }));
+    expect(screen.getByRole('checkbox', { name: '全部书签' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('navigation', { name: '工作空间' })).not.toBeInTheDocument();
+    expect(document.querySelector('.side-scroll')).not.toHaveTextContent('工作空间');
+    expect(screen.getByRole('navigation', { name: '多级分类树' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '显示设置' }));
+    await userEvent.click(screen.getByRole('switch', { name: '显示工作空间' }));
+    expect(screen.getByRole('checkbox', { name: '全部书签' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '导航首页' })).not.toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(within(screen.getByRole('navigation', { name: '工作空间' })).getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('没有勾选导航项时不留下空白工作空间，取消修改不改变现有设置', async () => {
+    localStorage.setItem('linkora.guest.preferences', JSON.stringify({ workspaceItems: [] }));
+    renderApp();
+    await userEvent.click(await screen.findByRole('button', { name: '显示设置' }));
+    expect(screen.queryByRole('navigation', { name: '工作空间' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('书签字号'), { target: { value: '20' } });
+    await userEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(document.querySelector('.shell')).toHaveStyle({ '--bookmark-font-size': '12px' });
+    await userEvent.click(screen.getByRole('button', { name: '显示设置' }));
+    expect(screen.getByLabelText('书签字号')).toHaveValue('12');
+  });
+
+  it('登录用户从账号恢复显示偏好，保存失败时回滚且允许重试', async () => {
+    authenticated = true;
+    serverPreferences = { ...serverPreferences, bookmarkFontSize: 16, categoryFontSize: 15, showWorkspace: false };
+    renderApp();
+    await waitFor(() => expect(document.querySelector('.shell')).toHaveStyle({ '--bookmark-font-size': '16px' }));
+    expect(screen.queryByRole('navigation', { name: '工作空间' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '显示设置' }));
+    fireEvent.change(screen.getByLabelText('书签字号'), { target: { value: '20' } });
+    failPreferences = true;
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存设置' })).toBeEnabled());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(document.querySelector('.shell')).toHaveStyle({ '--bookmark-font-size': '16px' });
+    failPreferences = false;
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(serverPreferences.bookmarkFontSize).toBe(20);
+    expect(serverPreferences.categoryFontSize).toBe(15);
+    expect(serverPreferences.showWorkspace).toBe(false);
   });
 });
 

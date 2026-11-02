@@ -18,7 +18,17 @@ export interface IconRefreshJob {
   results: { id: string; title: string; status: 'success' | 'failed' | 'skipped'; reason: 'success' | 'failed' | 'manual' | 'blocked' | 'changed' }[];
 }
 export interface Home { frequent: Bookmark[]; recent: Bookmark[]; counts: { bookmarks: number; categories: number; favorites: number; private?: number } }
-export interface Preferences { theme: 'light' | 'dark'; defaultEngine: string; defaultView: 'list' | 'grid'; expandedCategories: string[] }
+export const workspaceLinks = [
+  { id: 'home', name: '导航首页', path: '/home', icon: 'grid' },
+  { id: 'all', name: '全部书签', path: '/bookmarks', icon: 'bookmark' },
+  { id: 'starred', name: '星标收藏', path: '/bookmarks?filter=starred', icon: 'star' },
+  { id: 'private', name: '私密书签', path: '/bookmarks?privacy=private', icon: 'lock' },
+] as const;
+export type WorkspaceItem = typeof workspaceLinks[number]['id'];
+export interface Preferences {
+  theme: 'light' | 'dark'; defaultEngine: string; defaultView: 'list' | 'grid'; expandedCategories: string[];
+  bookmarkFontSize: number; categoryFontSize: number; showWorkspace: boolean; workspaceItems: WorkspaceItem[];
+}
 export interface Impact {
   revision: number; affectedBookmarks: number; affectedCategories: number; privateBookmarks: number;
   becomingPublicBookmarks: number; becomingPublicCategories: number; stillInheritedPrivate: number;
@@ -32,7 +42,19 @@ export function resolveBookmarkUrl(book: { url: string; url2?: string | null }, 
 }
 export const flattenCategories = (nodes: Category[]): Category[] => nodes.flatMap(node => [node, ...flattenCategories(node.children)]);
 export const domain = (value: string) => { try { return new URL(value).hostname.replace(/^www\./, ''); } catch { return 'example.com'; } };
-export const defaults: Preferences = { theme: 'light', defaultEngine: 'google', defaultView: 'grid', expandedCategories: [] };
+export const defaults: Preferences = { theme: 'light', defaultEngine: 'google', defaultView: 'grid', expandedCategories: [],
+  bookmarkFontSize: 12, categoryFontSize: 12, showWorkspace: true, workspaceItems: workspaceLinks.map(item => item.id) };
+export function normalizePreferences(value: Partial<Preferences> | null): Preferences {
+  const input = value && typeof value === 'object' ? value : {};
+  const fontSize = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 12 && value <= 20 ? value : 12;
+  return {
+    theme: input.theme === 'dark' ? 'dark' : 'light', defaultView: input.defaultView === 'list' ? 'list' : 'grid',
+    defaultEngine: engines.some(engine => engine.id === input.defaultEngine) ? input.defaultEngine! : defaults.defaultEngine,
+    expandedCategories: Array.isArray(input.expandedCategories) ? input.expandedCategories.filter(id => typeof id === 'string') : [],
+    bookmarkFontSize: fontSize(input.bookmarkFontSize), categoryFontSize: fontSize(input.categoryFontSize), showWorkspace: input.showWorkspace !== false,
+    workspaceItems: Array.isArray(input.workspaceItems) ? workspaceLinks.filter(item => input.workspaceItems!.includes(item.id)).map(item => item.id) : defaults.workspaceItems,
+  };
+}
 export const engines = [
   { id: 'google', name: 'Google', color: '#4285f4', template: 'https://www.google.com/search?q=' },
   { id: 'bing', name: 'Bing', color: '#12a9b6', template: 'https://www.bing.com/search?q=' },

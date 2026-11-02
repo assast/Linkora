@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { engineUrl, engines, resolveBookmarkUrl } from './types';
+import { defaults, engineUrl, engines, normalizePreferences, resolveBookmarkUrl, type Preferences } from './types';
+
+describe('显示偏好兼容', () => {
+  it('旧版偏好补齐默认值，保留有意清空的导航选择', () => {
+    expect(normalizePreferences({ theme: 'dark', workspaceItems: [] })).toEqual({ ...defaults, theme: 'dark', workspaceItems: [] });
+    expect(normalizePreferences(null)).toEqual(defaults);
+  });
+  it('忽略存储中的无效字号与导航项', () => {
+    expect(normalizePreferences({ bookmarkFontSize: 100, categoryFontSize: 14.5, showWorkspace: 'false',
+      workspaceItems: ['all', 'unknown', 'all'] } as unknown as Preferences)).toEqual({ ...defaults, workspaceItems: ['all'] });
+  });
+});
 
 describe('书签有效地址', () => {
   const url = 'https://primary.test/path';

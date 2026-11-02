@@ -131,6 +131,10 @@ model UserPreferences {
   defaultEngine      String @default("google") @map("default_engine")
   defaultView        String @default("list") @map("default_view")
   expandedCategories String[] @default([]) @map("expanded_categories") @db.Uuid
+  bookmarkFontSize   Int @default(12) @map("bookmark_font_size")
+  categoryFontSize   Int @default(12) @map("category_font_size")
+  showWorkspace      Boolean @default(true) @map("show_workspace")
+  workspaceItems     String[] @default(["home", "all", "starred", "private"]) @map("workspace_items")
   user               User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")

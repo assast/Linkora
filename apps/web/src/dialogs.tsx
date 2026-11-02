@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { Button, Icon, Modal } from './components';
+import { Button, Icon, Loading, Modal, QueryError } from './components';
+import { DisplayPreferencesDialog } from './display-preferences';
 import { APP_NAME } from './constants';
 import { errorMessage, useApp, type ConfirmOptions } from './state';
 import { flattenCategories, type Category } from './types';
@@ -62,6 +63,12 @@ function ActiveDialog() {
   const app = useApp();
   const dialog = app.dialog;
   if (!dialog) return null;
+  if (dialog.kind === 'preferences') {
+    if (app.identity.authenticated && !app.preferencesQuery.isSuccess) return <Modal title="显示设置" onClose={() => app.closeDialog()}>
+      {app.preferencesQuery.isError ? <QueryError retry={() => void app.preferencesQuery.refetch()} /> : <Loading />}
+    </Modal>;
+    return <DisplayPreferencesDialog />;
+  }
   if (dialog.kind === 'login') return <LoginDialog />;
   if (dialog.kind === 'category') return <CategoryDialog key={dialog.category?.id || `new-${dialog.parentId || ''}`} category={dialog.category} parentId={dialog.parentId} />;
   if (dialog.kind === 'account') return <Modal title="我的账号" description={app.identity.owner?.email} onClose={() => app.closeDialog()}>

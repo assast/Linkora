@@ -3,11 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, ApiError, resetRequests, StaleSessionError, type RequestOptions } from './api';
-import { defaults, flattenCategories, type AddressMode, type Category, type Home, type Identity, type Impact, type Preferences, type IconRefreshJob } from './types';
+import { defaults, flattenCategories, normalizePreferences, type AddressMode, type Category, type Home, type Identity, type Impact, type Preferences, type IconRefreshJob } from './types';
 import { IconGeneration } from './icon-generation';
 
 export interface ConfirmOptions { title: string; description: string; impact?: Impact; label?: string; danger?: boolean }
-export type ActiveDialog = null | { kind: 'login' | 'account' | 'manager' } | { kind: 'category'; category?: Category; parentId?: string | null };
+export type ActiveDialog = null | { kind: 'login' | 'account' | 'manager' | 'preferences' } | { kind: 'category'; category?: Category; parentId?: string | null };
 const addressModeKey = 'linkora.bookmark.addressMode';
 
 function storedAddressMode(): AddressMode {
@@ -18,9 +18,7 @@ function storedAddressMode(): AddressMode {
 function guestPreferences(): Preferences {
   try {
     const value = JSON.parse(localStorage.getItem('linkora.guest.preferences') || '{}') as Partial<Preferences>;
-    return { theme: value.theme === 'dark' ? 'dark' : 'light', defaultView: value.defaultView === 'list' ? 'list' : 'grid',
-      defaultEngine: ['google', 'bing', 'baidu', 'duck', 'github'].includes(value.defaultEngine || '') ? value.defaultEngine! : 'google',
-      expandedCategories: Array.isArray(value.expandedCategories) ? value.expandedCategories.filter(id => typeof id === 'string') : [] };
+    return normalizePreferences(value);
   } catch { return defaults; }
 }
 
@@ -119,7 +117,7 @@ function useAppState() {
   const preferencesQuery = useQuery({ queryKey: ['data', scope, 'preferences'], enabled: ready && identity.authenticated,
     queryFn: ({ signal }) => call<Preferences>('/preferences', { signal }) });
   const [guest, setGuest] = useState(guestPreferences);
-  const preferences = { ...(identity.authenticated ? preferencesQuery.data || defaults : guest), defaultView: guest.defaultView };
+  const preferences = { ...normalizePreferences(identity.authenticated ? preferencesQuery.data || defaults : guest), defaultView: guest.defaultView };
   useEffect(() => { document.documentElement.dataset.theme = preferences.theme; }, [preferences.theme]);
   const updatePreferences = async (patch: Partial<Preferences>) => {
     if (!identity.authenticated || patch.defaultView) {
@@ -127,12 +125,12 @@ function useAppState() {
       setGuest(next);
       try { localStorage.setItem('linkora.guest.preferences', JSON.stringify(next)); } catch { /* 禁用存储时仍允许切换视图。 */ }
     }
-    if (!identity.authenticated) return;
+    if (!identity.authenticated) return true;
     const key = ['data', scope, 'preferences'];
     const old = preferences;
     client.setQueryData(key, { ...old, ...patch });
-    try { client.setQueryData(key, await call<Preferences>('/preferences', { method: 'PATCH', body: patch })); }
-    catch (error) { if (!(error instanceof StaleSessionError)) { client.setQueryData(key, old); toast.error(errorMessage(error)); } }
+    try { client.setQueryData(key, await call<Preferences>('/preferences', { method: 'PATCH', body: patch })); return true; }
+    catch (error) { if (!(error instanceof StaleSessionError)) { client.setQueryData(key, old); toast.error(errorMessage(error)); } return false; }
   };
   const refresh = useCallback(() => client.invalidateQueries({ queryKey: ['data', scope] }), [client, scope]);
   const login = async (email: string, password: string, sessionDays: number | null) => {
@@ -159,7 +157,7 @@ function useAppState() {
   };
   return { identity, identityQuery, scope, ready, call, addressMode, updateAddressMode, iconGeneration, reloadIcons, iconJob: iconJobId ? iconJobQuery.data : undefined,
     iconJobId, startingIcons, startIconRefresh, dismissIconJob: () => setIconTask(null), categoriesQuery, categories: categoriesQuery.data || [],
-    flatCategories: flattenCategories(categoriesQuery.data || []), homeQuery, tagsQuery, preferences,
+    flatCategories: flattenCategories(categoriesQuery.data || []), homeQuery, tagsQuery, preferences, preferencesQuery,
     updatePreferences, refresh, login, logout, dialog, confirmation, setDialog, closeDialog, confirm, openLogin, openCategory, openManager, addBookmark, saveWithPreview };
 }
 

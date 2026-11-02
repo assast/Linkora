@@ -1,5 +1,5 @@
 -- Linkora 全量初始化 SQL（PostgreSQL 16+）
--- 最新迁移：202611020002_iconify_source
+-- 最新迁移：202611020003_display_preferences
 -- 仅用于空数据库；包含当前全部业务表、枚举、索引及约束。
 -- 不插入账号或演示数据；Prisma 迁移登记步骤见本目录 README.md。
 
@@ -87,6 +87,10 @@ CREATE TABLE "user_preferences" (
     "default_engine" TEXT NOT NULL DEFAULT 'google',
     "default_view" TEXT NOT NULL DEFAULT 'list',
     "expanded_categories" UUID[] DEFAULT ARRAY[]::UUID[],
+    "bookmark_font_size" INTEGER NOT NULL DEFAULT 12,
+    "category_font_size" INTEGER NOT NULL DEFAULT 12,
+    "show_workspace" BOOLEAN NOT NULL DEFAULT true,
+    "workspace_items" TEXT[] NOT NULL DEFAULT ARRAY['home', 'all', 'starred', 'private']::TEXT[],
 
     CONSTRAINT "user_preferences_pkey" PRIMARY KEY ("user_id")
 );

@@ -98,6 +98,50 @@ test('卡片作为默认视图，切换后刷新和新标签页记住选择', as
   await expect(page.locator('.bookmark-tile')).toHaveCount(3);
 });
 
+test('显示设置在卡片、列表和分类树生效，刷新保留，工作空间可全部隐藏再恢复', async ({ page, isMobile }) => {
+  await page.goto('/bookmarks');
+  await page.getByRole('button', { name: '显示设置', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '显示设置' });
+  await dialog.getByLabel('书签字号').focus();
+  await page.keyboard.press('End');
+  await dialog.getByLabel('分类字号').focus();
+  await page.keyboard.press('Home');
+  for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowRight');
+  await expect(dialog.locator('.preference-preview-bookmark')).toHaveCSS('font-size', '20px');
+  await expect(dialog.locator('.preference-preview-category')).toHaveCSS('font-size', '16px');
+  await page.screenshot({ path: test.info().outputPath('display-preferences.png'), fullPage: true });
+  await dialog.getByRole('checkbox', { name: '星标收藏', exact: true }).uncheck();
+  await dialog.getByRole('button', { name: '保存设置' }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.bookmark-tile .tile-name > a').first()).toHaveCSS('font-size', '20px');
+  await expect(page.locator('.bookmark-tile .tile-bottom > span').first()).toHaveCSS('font-size', '16px');
+  await page.getByRole('button', { name: '紧凑列表' }).click();
+  await expect(page.locator('.bookmark-name strong').first()).toHaveCSS('font-size', '20px');
+  if (!isMobile) await expect(page.locator('.bookmark-row .bookmark-category').first()).toHaveCSS('font-size', '16px');
+  await page.reload();
+  await expect(page.locator('.bookmark-name strong').first()).toHaveCSS('font-size', '20px');
+  if (isMobile) await page.getByRole('button', { name: '打开分类导航' }).click();
+  await expect(page.locator('.tree-main').first()).toHaveCSS('font-size', '16px');
+  const workspace = page.getByRole('navigation', { name: '工作空间', exact: true });
+  await expect(workspace.getByRole('button', { name: /星标收藏/ })).toHaveCount(0);
+  if (isMobile) await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '显示设置', exact: true }).click();
+  await dialog.getByRole('switch', { name: '显示工作空间' }).uncheck();
+  await dialog.getByRole('button', { name: '保存设置' }).click();
+  await expect(workspace).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: '多级分类树' })).toHaveCount(1);
+  await page.reload();
+  await expect(workspace).toHaveCount(0);
+  await page.getByRole('button', { name: '显示设置', exact: true }).click();
+  await dialog.getByRole('switch', { name: '显示工作空间' }).check();
+  await expect(dialog.getByRole('checkbox', { name: '星标收藏', exact: true })).not.toBeChecked();
+  await dialog.getByRole('button', { name: '恢复默认' }).click();
+  await dialog.getByRole('button', { name: '保存设置' }).click();
+  await expect(workspace.getByRole('button')).toHaveCount(3);
+  await expect(page.locator('.bookmark-name strong').first()).toHaveCSS('font-size', '12px');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('打开分类全部书签使用独立标签页并解除 opener', async ({ page, context }) => {
   await context.route('https://bookmark.example.test/**', route => route.fulfill({ body: '<title>测试书签</title>' }));
   await page.goto('/bookmarks?categoryId=category');
