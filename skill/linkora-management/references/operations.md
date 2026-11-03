@@ -11,7 +11,7 @@
 
 ## 健康与故障定位
 
-先用客户端匿名检查 `/health`，再检查首页/列表。503 通常表示数据库未就绪；403 优先核对 `LINKORA_BASE_URL` 是否与 `SITE_URL` 同源、反代是否保留 Cookie。生产使用 HTTPS，Cookie Secure 不能通过 HTTP 正常工作。
+先用客户端匿名检查 `/health`，再检查首页/列表。503 通常表示数据库未就绪；403 优先核对 `LINKORA_BASE_URL` 的来源是否在 `SITE_URL` 或 `ALLOWED_ORIGINS` 中、反代是否保留 Host 和 Cookie。HTTPS 入口使用 Secure Cookie；生产需同时支持内网 HTTP 登录时，将完整内网来源加入 `ALLOWED_ORIGINS` 并显式设置 `ALLOW_INSECURE_HTTP=true`，该入口使用独立的非 Secure Cookie，不影响 HTTPS 入口。
 
 以下只在已确认的部署主机执行。设置 `LINKORA_STACK_DIR` 为实际包含 `.env` 与 `compose.yaml` 的目录；在仓库目录执行时改用 `deploy/.env`、`deploy/compose.yaml`：
 

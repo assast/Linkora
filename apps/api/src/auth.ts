@@ -22,7 +22,7 @@ export class AuthService {
   constructor(private readonly db: Database, private readonly config: AppConfig) {}
 
   origin(request: Request) {
-    if (request.get('origin') !== this.config.siteUrl.origin) throw new ForbiddenException('请求来源不允许');
+    if (!this.config.allowedOrigins.some(url => url.origin === request.get('origin'))) throw new ForbiddenException('请求来源不允许');
   }
 
   async resolve(request: Request, response?: Response): Promise<Viewer> {
@@ -31,7 +31,7 @@ export class AuthService {
     const tokenHash = hash(token);
     const session = await this.db.session.findUnique({ where: { tokenHash }, include: { user: { select: { id: true, email: true } } } });
     if (!session || (session.expiresAt && session.expiresAt.getTime() <= Date.now())) return { ownerId: null };
-    if (!session.expiresAt) response?.cookie(this.config.cookieName, token, { ...this.config.cookieOptions, maxAge: PERMANENT_COOKIE_MAX_AGE });
+    if (!session.expiresAt) response?.cookie(this.config.cookieName, token, { ...this.config.cookieOptionsFor(request), maxAge: PERMANENT_COOKIE_MAX_AGE });
     return { ownerId: session.userId, email: session.user.email, csrfToken: session.csrfToken, tokenHash };
   }
 
@@ -51,13 +51,13 @@ export class AuthService {
     const sessionDays = dto.sessionDays === null ? null : dto.sessionDays ?? this.config.sessionDays;
     const duration = sessionDays === null ? PERMANENT_COOKIE_MAX_AGE : sessionDays * DAY_MS;
     await this.db.session.create({ data: { tokenHash: hash(token), csrfToken, userId: user.id, expiresAt: sessionDays === null ? null : new Date(now + duration) } });
-    response.cookie(this.config.cookieName, token, { ...this.config.cookieOptions, maxAge: duration });
+    response.cookie(this.config.cookieName, token, { ...this.config.cookieOptionsFor(request), maxAge: duration });
     return { authenticated: true, owner: { id: user.id, email: user.email }, csrfToken };
   }
 
-  async logout(viewer: Viewer, response: Response) {
+  async logout(viewer: Viewer, request: Request, response: Response) {
     if (viewer.tokenHash) await this.db.session.deleteMany({ where: { tokenHash: viewer.tokenHash } });
-    response.clearCookie(this.config.cookieName, this.config.cookieOptions);
+    response.clearCookie(this.config.cookieName, this.config.cookieOptionsFor(request));
     return { authenticated: false };
   }
 }
@@ -88,7 +88,7 @@ class AuthController {
       : { authenticated: false, defaultSessionDays: this.config.sessionDays };
   }
   @Public() @Post('login') login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) { return this.auth.login(dto, req, res); }
-  @Post('logout') logout(@Identity() viewer: Viewer, @Res({ passthrough: true }) res: Response) { return this.auth.logout(viewer, res); }
+  @Post('logout') logout(@Identity() viewer: Viewer, @Req() req: Request, @Res({ passthrough: true }) res: Response) { return this.auth.logout(viewer, req, res); }
 }
 
 @Module({ controllers: [AuthController], providers: [AppConfig, AuthService, { provide: APP_GUARD, useClass: AuthGuard }], exports: [AppConfig, AuthService] })

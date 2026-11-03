@@ -78,7 +78,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d
 sh deploy/init-owner.sh
 ```
 
-`init-owner.sh` 交互读取初始邮箱与密码，不把密码写到命令行或 Git。Web 端口默认只绑定本机，生产 HTTPS 由现有入口代理提供；NC 上需要私网访问时，将绑定地址设为 NC 的私有地址。仅本机容器验证可以显式启用 `ALLOW_INSECURE_HTTP=true`。
+`init-owner.sh` 交互读取初始邮箱与密码，不把密码写到命令行或 Git。Web 端口默认只绑定本机，生产 HTTPS 由现有入口代理提供；NC 上需要私网访问时，将绑定地址设为 NC 的私有地址。域名与内网 IP 同时登录时，保留 `SITE_URL=https://nav.icio.eu.org`，设置 `ALLOWED_ORIGINS=http://10.144.144.10:8080` 和 `ALLOW_INSECURE_HTTP=true`。HTTPS 入口的 Cookie 仍启用 Secure，HTTP 入口单独登录；完整配置见 [部署说明](docs/deployment.md#域名与内网-ip-同时登录)。
 
 ### 书签图标
 

@@ -14,7 +14,7 @@ description: 管理已运行的 Linkora 单所有者书签服务：通过 API �
 
 ## 连接与会话
 
-从现有私有配置获取 `LINKORA_BASE_URL`（站点根地址，必须与服务端 `SITE_URL` 同源）、`LINKORA_EMAIL` 和 `LINKORA_PASSWORD`。密码通过受保护的环境注入或交互输入，不放在命令行、文档、Git 或回复里。缺少服务地址时先定位现有部署配置；只有无法确定时才询问用户。
+从现有私有配置获取 `LINKORA_BASE_URL`（站点根地址，来源必须匹配服务端 `SITE_URL` 或 `ALLOWED_ORIGINS` 中的一项）、`LINKORA_EMAIL` 和 `LINKORA_PASSWORD`。密码通过受保护的环境注入或交互输入，不放在命令行、文档、Git 或回复里。缺少服务地址时先定位现有部署配置；只有无法确定时才询问用户。
 
 以下命令从技能目录运行；在仓库根目录运行时加上 `skill/linkora-management/` 前缀：
 

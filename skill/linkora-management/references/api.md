@@ -4,7 +4,7 @@
 
 ## 认证与错误
 
-- `POST /auth/login`：`{email,password,sessionDays?}`；`sessionDays` 可设为 1–3650 的整数，`null` 表示永久有效，省略时采用服务端 `SESSION_DAYS`（默认 7 天）；`Origin` 必须等于服务端 `SITE_URL` 的源。
+- `POST /auth/login`：`{email,password,sessionDays?}`；`sessionDays` 可设为 1–3650 的整数，`null` 表示永久有效，省略时采用服务端 `SESSION_DAYS`（默认 7 天）；`Origin` 必须匹配服务端 `SITE_URL` 或 `ALLOWED_ORIGINS` 中的一项来源。
 - `GET /auth/me`：返回 `authenticated`、所有者身份与 `csrfToken`；`defaultSessionDays` 表示当前服务端默认免登录天数。
 - `POST /auth/logout`：注销当前会话。
 - 会话 Cookie 为 `linkora_session`，HttpOnly，作用路径 `/api`；有限会话按所选天数到期，永久会话在服务端不设过期时间并在访问时续期 Cookie。所有者的非 GET 请求同时携带 Cookie、`Origin`、`X-CSRF-Token`；登录只要求可信来源。

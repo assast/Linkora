@@ -6,6 +6,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?请设置 NC 专用数据库连接}
       SITE_URL: ${SITE_URL:?请设置完整站点地址}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       SESSION_DAYS: ${SESSION_DAYS:-7}
       LOGIN_LIMIT: ${LOGIN_LIMIT:-10}
       ALLOW_INSECURE_HTTP: ${ALLOW_INSECURE_HTTP:-false}
