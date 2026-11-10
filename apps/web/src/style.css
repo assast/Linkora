@@ -78,6 +78,7 @@ input[type=checkbox] { accent-color:var(--primary); }
 .home-empty { grid-column:1/-1; border:1px dashed var(--border); border-radius:10px; padding:22px; display:flex; align-items:center; gap:9px; color:var(--muted); font-size:11px; }
 .home-empty svg { color:var(--primary); }
 .category-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+.category-actions>button:last-child { margin-left:auto; }
 .category-actions>span { color:var(--muted); font-size:11px; }
 .sidebar-hint { padding:12px; font-size:10px; color:var(--faint); line-height:1.7; }
 .mobile-overlay { border:0; }

@@ -116,9 +116,9 @@ export function LibraryPage() {
 
   return <main className="page"><div className="page-head"><div><h1>{title}</h1><div className="subline">共 {query.data?.total ?? '—'} 条书签 · {app.identity.authenticated ? '普通与私密收藏，统一整理' : '访客浏览公开内容，登录后查看全部'}</div>{category && <div className="folder-path"><Icon name="folder" /><b>{category.path}</b></div>}</div>
     <div className="page-ops"><Button onClick={() => app.openCategory(undefined, category?.id)}><Icon name="folderPlus" />新建分类</Button><Button className="primary" onClick={app.addBookmark}><Icon name="plus" />添加书签</Button></div></div>
-    {category && <div className="category-actions"><Button disabled={!categoryBooks.data?.length} onClick={openCategoryBooks}><Icon name="external" />打开全部书签</Button>
-      {categoryBooks.isError ? <Button onClick={() => void categoryBooks.refetch()}>重新加载分类书签</Button>
-        : <span>{categoryBooks.isPending ? '正在加载分类书签…' : `共 ${categoryBooks.data?.length ?? 0} 条 · 包含子分类`}</span>}</div>}
+    {category && <div className="category-actions">{categoryBooks.isError ? <Button onClick={() => void categoryBooks.refetch()}>重新加载分类书签</Button>
+      : <span>{categoryBooks.isPending ? '正在加载分类书签…' : `共 ${categoryBooks.data?.length ?? 0} 条 · 包含子分类`}</span>}
+      <Button disabled={!categoryBooks.data?.length} onClick={openCategoryBooks}><Icon name="external" />打开全部书签</Button></div>}
     <div className="library-toolbar"><label className="field-search"><Icon name="search" /><SearchInput id="library-search" aria-label="搜索书签" placeholder="搜索书签名称、域名、标签或路径…" value={params.get('keyword') || ''} onValueChange={value => changeFilter('keyword', value)} /></label>
       <Button className={showFilters ? 'soft' : ''} onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}><Icon name="filter" />筛选</Button>
       <select className="control-select" aria-label="排序" value={sortValue} onChange={event => changeFilter('sort', event.target.value)}><option value="newest">最近添加</option><option value="oldest">最早添加</option><option value="frequent">访问最多</option><option value="title">名称 A-Z</option></select>
